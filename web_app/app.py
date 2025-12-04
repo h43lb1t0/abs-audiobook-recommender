@@ -1,4 +1,3 @@
-from math import log
 from flask import Flask, jsonify, send_from_directory, request, Response
 import os
 import requests

@@ -4,7 +4,6 @@ from typing import List, Dict
 import json
 import os
 
-from google.genai.types import Language
 from recommend_lib.abs_api import get_all_items, get_finished_books
 from recommend_lib.gemini import generate_book_recommendations
 
