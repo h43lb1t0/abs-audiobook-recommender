@@ -108,8 +108,6 @@ def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
     finished_str = ""
     for book in finished_books_list:
         finished_str += f"- {book['title']} by {book['author']}\n"
-
-    logger.debug(f"Finished books: {finished_str}")
             
     unread_str = ""
     for book in unread_books:
@@ -123,7 +121,6 @@ def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
         entry = f"ID:{book['_index']} | {book['title']} by {book['author']}{series_info}"
         unread_str += f"{entry}\n"
 
-    logger.debug(f"Unread books: {unread_str}")
 
     
     Language_setting = os.getenv('LANGUAGE', 'de').lower()
@@ -135,6 +132,7 @@ def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
     logger.info(f"Prompt: {prompt}")
 
     if not use_gemini:
+        logger.warning("Gemini is not enabled, skipping recommendation generation")
         return []
     
     recs = generate_book_recommendations(prompt)
