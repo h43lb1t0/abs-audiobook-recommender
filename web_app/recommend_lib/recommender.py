@@ -2,11 +2,34 @@ import logging
 from dotenv import load_dotenv
 from typing import List, Dict
 import json
+import os
+
+from google.genai.types import Language
 from recommend_lib.abs_api import get_all_items, get_finished_books
 from recommend_lib.gemini import generate_book_recommendations
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+def _load_language_file(language: str) -> str:
+    """
+    Loads the language file
+
+    Args:
+        language (str): The language code
+
+    Returns:
+        str: The content of the language file
+    """
+    languages_dir = os.path.join(os.path.dirname(__file__), 'languages')
+    language_file = os.path.join(languages_dir, f"{language}.txt")
+    if not os.path.exists(language_file):
+        raise ValueError(f"Language file not found: {language_file}")
+    
+    with open(language_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    return content
 
 def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
     """
@@ -18,6 +41,8 @@ def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
 
     logger.info("Getting recommendations")
     load_dotenv()
+
+
 
     items_map, series_counts = get_all_items()
     finished_ids, in_progress_ids, finished_keys = get_finished_books(items_map)
@@ -103,28 +128,17 @@ def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
 
     logger.debug(f"Unread books: {unread_str}")
 
-    prompt = f"""
-    Du bist ein hilfreicher Bibliothekar.
+    if not use_gemini:
+        return []
     
-    Hier ist eine Liste von Büchern, die ich bereits gehört habe (Geschmacksprofil):
-    {finished_str}
-    
-    Hier ist eine Liste von UNGEHÖRTEN Büchern aus meiner Bibliothek (Auswahlpool):
-    {unread_str}
-    
-    AUFGABE:
-    Wähle 5 Empfehlungen aus der UNGEHÖRTEN Liste.
-    
-    REGELN:
-    1. Sei KREATIV! Schlage nicht nur offensichtliche Treffer vor. Suche nach verborgenen Schätzen oder Büchern, die thematisch passen, aber vielleicht ein anderes Genre sind oder eine neue Perspektive bieten.
-    2. Das Ziel ist es, NEUE Bücher zu entdecken, die interessant sein könnten.
-    3. Gib für jede Empfehlung eine kurze Begründung an, warum sie basierend auf meinem Geschmacksprofil interessant sein könnte (z.B. "Weil du X mochtest, könnte dir Y gefallen, da es ähnliche Themen behandelt, aber...").
-    """
+    Language_setting = os.getenv('LANGUAGE', 'de').lower()
+
+    prompt_string = _load_language_file(Language_setting)
+
+    prompt = prompt_string.replace("{finished_books}", finished_str).replace("{unread_books}", unread_str)
 
     logger.debug(f"Prompt: {prompt}")
 
-    if not use_gemini:
-        return []
 
     recs = generate_book_recommendations(prompt)
 

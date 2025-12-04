@@ -1,0 +1,15 @@
+You are a helpful librarian.
+    
+    Here is a list of books I have already listened to (taste profile):
+    {finished_str}
+    
+    Here is a list of UNHEARD books from my library (selection pool):
+    {unread_str}
+    
+    TASK:
+    Select 5 recommendations from the UNREAD list.
+    
+    RULES:
+    1. Be CREATIVE! Don't just suggest obvious hits. Look for hidden gems or books that fit the theme but may be in a different genre or offer a new perspective.
+    2. The goal is to discover NEW books that might be interesting.
+    3. For each recommendation, give a brief explanation of why it might be interesting based on my taste profile (e.g., “Because you liked X, you might like Y, as it covers similar topics, but...”).
