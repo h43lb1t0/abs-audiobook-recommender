@@ -93,5 +93,12 @@ ABS_vorschlaege/
 
 (Strikethrough items are not actively planned but may be revisited in the future.)
 
+
+## Contributing
+Contributions are welcome! Please open issues or submit pull requests (opening an issue with the proposed feature before a PR is encouraged) for bug fixes, features, or improvements.
+
+## License
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
  
 
