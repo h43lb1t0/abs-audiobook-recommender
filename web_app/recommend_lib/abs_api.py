@@ -13,10 +13,14 @@ load_dotenv()
 
 ABS_URL = os.getenv("ABS_URL")
 ABS_TOKEN = os.getenv("ABS_TOKEN")
+ABS_LIB = os.getenv("ABS_LIB")
 
 if not ABS_URL or not ABS_TOKEN:
     logger.error("ABS_URL and ABS_TOKEN must be set in the environment")
     raise ValueError("ABS_URL and ABS_TOKEN must be set in the environment")
+
+if not ABS_LIB:
+    logger.warning("ABS_LIB is not set in the environment, using all libraries")
 
 HEADERS = {
     "Authorization": f"Bearer {ABS_TOKEN}",
@@ -43,7 +47,11 @@ def get_all_items() -> Tuple[dict, dict]:
 
     for lib in libraries:
         if lib.get('mediaType') != 'book':
-            logger.debug(f"Skipping library {lib['name']} because it is not a book library")
+            logger.info(f"Skipping library {lib['name']} because it is not a book library")
+            continue
+
+        if ABS_LIB and lib['id'] != ABS_LIB:
+            logger.info(f"Skipping library {lib['name']} because it does not match ABS_LIB")
             continue
 
         items_url = f"{ABS_URL}/api/libraries/{lib['id']}/items?limit=0&minified=0"
