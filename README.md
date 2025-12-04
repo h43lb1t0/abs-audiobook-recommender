@@ -53,7 +53,7 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     *   **ABS_TOKEN**: Generate a token in your ABS user settings.
     *   **GEMINI_API_KEY**: Your API key from Google AI Studio.
     *   **LANGUAGE**: (Optional) The language code for recommendations (e.g., `de` for German, `en` for English).You can add your own translations in `web_app/recommend_lib/languages` folder and use the filename as the language code.
-    *   **ABS_LIB**: (Optional) The ID of the library you want to use. If not set, all libraries will be used. This is useful if you want to restrict recommendations to a specific library (e.g. Audiobooks) but still want to use finished books from other libraries (e.g. eBooks) to generate recommendations.
+    *   **ABS_LIB**: (Optional) The ID of the library you want to use. If not set, all libraries will be used. This is useful if you want to restrict recommendations to a specific library (e.g. Audiobooks). In this way you can still get the audiobook version recommended even if you have finished the ebook version.
 
 ## Usage
 
