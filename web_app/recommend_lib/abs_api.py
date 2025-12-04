@@ -28,6 +28,29 @@ HEADERS = {
 }
 
 
+def get_abs_users() -> list:
+    """
+    Returns all (non admin) users from ABS
+
+    Returns:
+        list: A list of users
+    """
+    users_resp = requests.get(f"{ABS_URL}/api/users", headers=HEADERS)
+    users_resp.raise_for_status()
+    accounts = users_resp.json().get('users', [])
+    abs_users = [account for account in accounts if account.get('type') == 'user']
+    clean_users = []
+    for abs_user in abs_users:
+        user = {
+            'id': abs_user.get('id'),
+            'username': abs_user.get('username'),
+        }
+        clean_users.append(user)
+    return clean_users
+        
+
+
+
 def get_all_items() -> Tuple[dict, dict]:
     """
     Returns all items from ABS
@@ -101,22 +124,41 @@ def get_all_items() -> Tuple[dict, dict]:
 
 
 
-def get_finished_books(items_map: dict) -> Tuple[set, set]:
+def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, set]:
     """
     Returns the finished books from ABS (books count as finished if they are finished or if they are 97% read)
 
     Args:
         items_map (dict): The items map
+        user_id (str): The user ID to fetch finished books for. If None, uses the token's user (api/me).
 
     Returns:
-        Tuple[set, set]: A tuple containing the finished books and the finished keys
+        Tuple[set, set, set]: A tuple containing the finished books, in-progress books, and the finished keys
     """
 
-    me_resp = requests.get(f"{ABS_URL}/api/me", headers=HEADERS)
-    me_resp.raise_for_status()
-    me_data = me_resp.json()
+    if user_id:
+        url = f"{ABS_URL}/api/users/{user_id}"
+    else:
+        url = f"{ABS_URL}/api/me"
 
-    media_progress = me_data.get('mediaProgress', [])
+    logger.info(f"Fetching finished books from: {url}")
+
+    try:
+        resp = requests.get(url, headers=HEADERS)
+        resp.raise_for_status()
+        user_data = resp.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching user data: {e}")
+        return set(), set(), set()
+
+    # The user object structure is the same for /api/me and /api/users/{id}
+    # However, /api/users/{id} might return the user object directly or wrapped.
+    # Based on get_abs_users, /api/users returns { users: [...] }
+    # Usually /api/users/{id} returns the user object directly.
+    
+    # Let's assume it returns the user object directly which contains mediaProgress.
+    media_progress = user_data.get('mediaProgress', [])
+    
     finished_ids = set()
     in_progress_ids = set()
 

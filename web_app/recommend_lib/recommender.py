@@ -30,7 +30,7 @@ def _load_language_file(language: str) -> str:
     
     return content
 
-def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
+def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Dict[str, str]]:
     """
     Returns the recommendations
 
@@ -38,11 +38,11 @@ def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
         List[Dict[str, str]]: The recommendations
     """
 
-    logger.info("Getting recommendations")
+    logger.info(f"Getting recommendations for user_id: {user_id}")
     load_dotenv()
 
     items_map, series_counts = get_all_items()
-    finished_ids, in_progress_ids, finished_keys = get_finished_books(items_map)
+    finished_ids, in_progress_ids, finished_keys = get_finished_books(items_map, user_id)
     
     for item_id in finished_ids:
         if item_id in items_map:

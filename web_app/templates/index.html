@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,10 +8,18 @@
     <link rel="stylesheet" href="/static/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
+
 <body>
     <div class="container">
         <header>
-            <h1>Audiobook Recommendations</h1>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h1>Audiobook Recommendations</h1>
+                <div>
+                    <a href="{{ url_for('change_password') }}" class="btn secondary"
+                        style="width: auto; margin: 0; margin-right: 10px;">Change Password</a>
+                    <a href="{{ url_for('logout') }}" class="btn secondary" style="width: auto; margin: 0;">Logout</a>
+                </div>
+            </div>
             <p>Discover your next favorite book from your local library.</p>
         </header>
 
@@ -25,10 +34,11 @@
             <div id="results" class="grid hidden">
                 <!-- Cards will be injected here -->
             </div>
-            
+
             <div id="error-message" class="error hidden"></div>
         </main>
     </div>
     <script src="/static/script.js"></script>
 </body>
+
 </html>

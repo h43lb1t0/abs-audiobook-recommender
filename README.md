@@ -12,6 +12,7 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
 -   **AI-Powered Recommendations**: Uses Google Gemini (model `gemini-2.5-pro`, with a free API key you get 50 requests per day. Last checked: 04.12.2025) to analyze your taste profile based on finished books and suggests hidden gems from your library.
 -   **Web Interface**: A simple, clean web interface to view recommendations with cover art and AI-generated reasons.
 -   **Privacy Focused**: Only sends book titles and authors to Gemini, not your full library data or personal info.
+-   **User Authentication**: Secure login system to access personalized recommendations.
 
 ## Prerequisites
 
@@ -50,7 +51,7 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     ```
 
     *   **ABS_URL**: The full URL to your Audiobookshelf server (e.g., `http://192.168.1.100:13378`).
-    *   **ABS_TOKEN**: Generate a token in your ABS user settings.
+    *   **ABS_TOKEN**: The root API token for your Audiobookshelf server (found in Settings > Users > Root User).
     *   **GEMINI_API_KEY**: Your API key from Google AI Studio.
     *   **LANGUAGE**: (Optional) The language code for recommendations (e.g., `de` for German, `en` for English).You can add your own translations in `web_app/recommend_lib/languages` folder and use the filename as the language code.
     *   **ABS_LIB**: (Optional) The ID of the library you want to use. If not set, all libraries will be used. This is useful if you want to restrict recommendations to a specific library (e.g. Audiobooks). In this way you can still get the audiobook version recommended even if you have finished the ebook version.
@@ -62,9 +63,14 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     python web_app/app.py
     ```
 
-2.  **View Recommendations:**
+2.  **Log In & View Recommendations:**
     Open your browser and go to `http://localhost:5000`.
-    The app will fetch your data, generate recommendations, and display them.
+
+    **Login Credentials:**
+    *   **Username**: Your Audiobookshelf username.
+    *   **Password**: Your Audiobookshelf username (case-sensitive).
+
+    *Note: The app syncs users from your ABS instance. By default, the password is set to be the same as the username.*
 
 ## Project Structure
 
@@ -75,6 +81,7 @@ ABS_vorschlaege/
 ├── README.md
 └── web_app/
     ├── app.py              # Flask web server entry point
+    ├── db.py               # Database connection and models
     ├── recommend_lib/      # Core recommendation logic
     │   ├── abs_api.py      # Audiobookshelf API client
     │   ├── gemini.py       # Google Gemini API integration
@@ -87,8 +94,8 @@ ABS_vorschlaege/
 
 - [x] Support for more languages (currently the prompt is in German only)
 - [x] Choose what ABS library to use (multiple libraries?)
-- [ ] Multi-user support
-- [ ] Login system
+- [x] Multi-user support
+- [x] Login system
 - [ ] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the Gemini API
 - [ ] Docker containerization for easier deployment
 - [ ] Enhanced UI/UX design
