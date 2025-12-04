@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audiobook Recommendations</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Audiobook Recommendations</h1>
+            <p>Discover your next favorite book from your local library.</p>
+        </header>
+
+        <main>
+            <div class="controls">
+                <button id="generate-btn" class="btn primary">
+                    <span class="btn-text">Generate Recommendations</span>
+                    <span class="loader hidden"></span>
+                </button>
+            </div>
+
+            <div id="results" class="grid hidden">
+                <!-- Cards will be injected here -->
+            </div>
+            
+            <div id="error-message" class="error hidden"></div>
+        </main>
+    </div>
+    <script src="/static/script.js"></script>
+</body>
+</html>
