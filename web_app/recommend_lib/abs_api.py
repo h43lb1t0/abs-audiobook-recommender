@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import re
 from typing import Tuple
 
-logging.basicConfig(level=logging.DEBUG)
+
 logger = logging.getLogger(__name__)
 
 load_dotenv()

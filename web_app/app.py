@@ -1,3 +1,4 @@
+from math import log
 from flask import Flask, jsonify, send_from_directory, request, Response
 import os
 import requests
@@ -26,7 +27,7 @@ def recommend():
     Returns the recommendations
     """
     try:
-        recs = get_recommendations(False)
+        recs = get_recommendations()
         return jsonify(recs)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

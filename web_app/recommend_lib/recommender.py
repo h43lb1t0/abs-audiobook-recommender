@@ -8,7 +8,7 @@ from google.genai.types import Language
 from recommend_lib.abs_api import get_all_items, get_finished_books
 from recommend_lib.gemini import generate_book_recommendations
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def _load_language_file(language: str) -> str:
@@ -41,8 +41,6 @@ def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
 
     logger.info("Getting recommendations")
     load_dotenv()
-
-
 
     items_map, series_counts = get_all_items()
     finished_ids, in_progress_ids, finished_keys = get_finished_books(items_map)
@@ -128,18 +126,18 @@ def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
 
     logger.debug(f"Unread books: {unread_str}")
 
-    if not use_gemini:
-        return []
     
     Language_setting = os.getenv('LANGUAGE', 'de').lower()
 
     prompt_string = _load_language_file(Language_setting)
 
-    prompt = prompt_string.replace("{finished_books}", finished_str).replace("{unread_books}", unread_str)
+    prompt = prompt_string.format(finished_str=finished_str, unread_str=unread_str)
 
-    logger.debug(f"Prompt: {prompt}")
+    logger.info(f"Prompt: {prompt}")
 
-
+    if not use_gemini:
+        return []
+    
     recs = generate_book_recommendations(prompt)
 
     if not recs:
@@ -172,7 +170,3 @@ def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
             logger.warning(f"Invalid index returned by Gemini: {rec_index}")
                 
     return final_recommendations
-
-
-if __name__ == '__main__':
-    get_recommendations(use_gemini=False)
