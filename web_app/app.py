@@ -1,11 +1,15 @@
 from flask import Flask, jsonify, send_from_directory, request, Response, render_template, redirect, url_for, flash
 import os
 import requests
+import logging
 from dotenv import load_dotenv
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from recommend_lib.recommender import get_recommendations
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 from recommend_lib.abs_api import get_abs_users
 from db import db, User
 
@@ -20,7 +24,7 @@ ABS_TOKEN = os.getenv("ABS_TOKEN")
 basedir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 db_path = os.path.join(basedir, 'instance', 'site.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
-print(f"Database path: {db_path}")
+logger.debug(f"Database path: {db_path}")
 
 db.init_app(app)
 
@@ -43,11 +47,11 @@ def sync_abs_users():
     """Syncs users from ABS to the local database."""
     try:
         abs_users = get_abs_users()
-        print(f"Fetched {len(abs_users)} users from ABS.")
+        logger.info(f"Fetched {len(abs_users)} users from ABS.")
         for abs_user in abs_users:
             user = db.session.get(User, abs_user['id'])
             if not user:
-                print(f"Creating new user: {abs_user['username']}")
+                logger.info(f"Creating new user: {abs_user['username']}")
                 # Create new user with hashed password (default is username)
                 hashed_password = generate_password_hash(abs_user['username'])
                 new_user = User(
@@ -57,51 +61,51 @@ def sync_abs_users():
                 )
                 db.session.add(new_user)
             else:
-                print(f"Updating existing user: {abs_user['username']}")
+                logger.info(f"Updating existing user: {abs_user['username']}")
                 # Update username if changed
                 user.username = abs_user['username']
                 
                 # Check if the current password is the plain text username (migration/first run with existing db)
                 if user.password == abs_user['username']:
-                     print(f"Migrating password for {user.username} to hash.")
+                     logger.debug(f"Migrating password for {user.username} to hash.")
                      user.password = generate_password_hash(abs_user['username'])
                 
                 # If the password is NOT the username, we assume the user changed it, so we DO NOT overwrite it.
         
         db.session.commit()
-        print("Synced users from ABS.")
+        logger.info("Synced users from ABS.")
     except Exception as e:
-        print(f"Error syncing users from ABS: {e}")
+        logger.error(f"Error syncing users from ABS: {e}")
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        
-        print(f"Login attempt for username: {username}")
-        
+
+        logger.debug(f"Login attempt for username: {username}")
+
         user = User.query.filter_by(username=username).first()
         
         if user:
-            print(f"User found: {user.username}, ID: {user.id}")
+            logger.debug(f"User found: {user.username}, ID: {user.id}")
             # Check if password matches hash OR if it matches plain text (backward compatibility during migration)
             if check_password_hash(user.password, password) or user.password == password:
-                print("Password match. Logging in.")
-                
+                logger.debug("Password match. Logging in.")
+
                 # If it matched plain text, upgrade to hash immediately
                 if user.password == password:
-                     print("Upgrading plain text password to hash on login.")
+                     logger.debug("Upgrading plain text password to hash on login.")
                      user.password = generate_password_hash(password)
                      db.session.commit()
 
                 login_user(user)
                 return redirect(url_for('index'))
             else:
-                print("Password mismatch.")
+                logger.debug("Password mismatch.")
                 flash('Invalid username or password')
         else:
-            print("User not found.")
+            logger.debug("User not found.")
             flash('Invalid username or password')
             
     return render_template('login.html')
