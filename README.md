@@ -9,7 +9,7 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     -   Excludes books you've already finished.
     -   Excludes books currently in progress.
     -   **Series Awareness**: Only recommends the *next* unread book in a series or the first book of a new series.
--   **AI-Powered Recommendations**: Uses Google Gemini (model `gemini-2.5-pro`) to analyze your taste profile based on finished books and suggests hidden gems from your library.
+-   **AI-Powered Recommendations**: Uses Google Gemini (model `gemini-2.5-pro`, with a free API key you get 50 requests per day. Last checked: 04.12.2025) to analyze your taste profile based on finished books and suggests hidden gems from your library.
 -   **Web Interface**: A simple, clean web interface to view recommendations with cover art and AI-generated reasons.
 -   **Privacy Focused**: Only sends book titles and authors to Gemini, not your full library data or personal info.
 
