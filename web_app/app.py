@@ -26,7 +26,7 @@ def recommend():
     Returns the recommendations
     """
     try:
-        recs = get_recommendations(False)
+        recs = get_recommendations()
         return jsonify(recs)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

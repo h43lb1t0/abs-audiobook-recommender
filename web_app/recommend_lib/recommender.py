@@ -2,11 +2,33 @@ import logging
 from dotenv import load_dotenv
 from typing import List, Dict
 import json
+import os
+
 from recommend_lib.abs_api import get_all_items, get_finished_books
 from recommend_lib.gemini import generate_book_recommendations
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def _load_language_file(language: str) -> str:
+    """
+    Loads the language file
+
+    Args:
+        language (str): The language code
+
+    Returns:
+        str: The content of the language file
+    """
+    languages_dir = os.path.join(os.path.dirname(__file__), 'languages')
+    language_file = os.path.join(languages_dir, f"{language}.txt")
+    if not os.path.exists(language_file):
+        raise ValueError(f"Language file not found: {language_file}")
+    
+    with open(language_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    return content
 
 def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
     """
@@ -103,29 +125,18 @@ def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
 
     logger.debug(f"Unread books: {unread_str}")
 
-    prompt = f"""
-    Du bist ein hilfreicher Bibliothekar.
     
-    Hier ist eine Liste von Büchern, die ich bereits gehört habe (Geschmacksprofil):
-    {finished_str}
-    
-    Hier ist eine Liste von UNGEHÖRTEN Büchern aus meiner Bibliothek (Auswahlpool):
-    {unread_str}
-    
-    AUFGABE:
-    Wähle 5 Empfehlungen aus der UNGEHÖRTEN Liste.
-    
-    REGELN:
-    1. Sei KREATIV! Schlage nicht nur offensichtliche Treffer vor. Suche nach verborgenen Schätzen oder Büchern, die thematisch passen, aber vielleicht ein anderes Genre sind oder eine neue Perspektive bieten.
-    2. Das Ziel ist es, NEUE Bücher zu entdecken, die interessant sein könnten.
-    3. Gib für jede Empfehlung eine kurze Begründung an, warum sie basierend auf meinem Geschmacksprofil interessant sein könnte (z.B. "Weil du X mochtest, könnte dir Y gefallen, da es ähnliche Themen behandelt, aber...").
-    """
+    Language_setting = os.getenv('LANGUAGE', 'de').lower()
 
-    logger.debug(f"Prompt: {prompt}")
+    prompt_string = _load_language_file(Language_setting)
+
+    prompt = prompt_string.format(finished_str=finished_str, unread_str=unread_str)
+
+    logger.info(f"Prompt: {prompt}")
 
     if not use_gemini:
         return []
-
+    
     recs = generate_book_recommendations(prompt)
 
     if not recs:
@@ -158,7 +169,3 @@ def get_recommendations(use_gemini: bool = True) -> List[Dict[str, str]]:
             logger.warning(f"Invalid index returned by Gemini: {rec_index}")
                 
     return final_recommendations
-
-
-if __name__ == '__main__':
-    get_recommendations(use_gemini=False)
