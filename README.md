@@ -1,4 +1,4 @@
-# ABS Vorschläge (Audiobookshelf Recommendations)
+# ABS audiobook Recommender (Audiobookshelf audiobook Recommendations)
 
 A personalized recommendation system for your [Audiobookshelf](https://www.audiobookshelf.org/) library. This tool analyzes your listening history and uses Google's Gemini AI to suggest the next audiobook you should listen to from your unread collection.
 
