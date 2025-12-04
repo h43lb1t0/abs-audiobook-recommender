@@ -84,6 +84,7 @@ ABS_vorschlaege/
 ## Roadmap
 
 - [x] Support for more languages (currently the prompt is in German only)
+- [ ] Choose what ABS library to use (multiple libraries?)
 - [ ] Multi-user support
 - [ ] Login system
 - [ ] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the Gemini API
