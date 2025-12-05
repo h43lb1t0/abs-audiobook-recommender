@@ -7,8 +7,10 @@ requires-python = ">=3.13"
 dependencies = [
     "flask>=3.1.2",
     "flask-login>=0.6.3",
+    "flask-socketio>=5.5.1",
     "flask-sqlalchemy>=3.1.1",
     "google-genai>=1.53.0",
     "python-dotenv>=1.2.1",
     "requests>=2.32.5",
+    "simple-websocket>=1.1.0",
 ]

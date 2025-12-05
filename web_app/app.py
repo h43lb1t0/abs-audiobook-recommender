@@ -5,6 +5,7 @@ import logging
 from dotenv import load_dotenv
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_socketio import SocketIO, emit
 
 from recommend_lib.recommender import get_recommendations, get_last_recommendations
 
@@ -16,6 +17,8 @@ from models.db import db, User
 load_dotenv()
 
 def bool_from_env(var):
+    if var is None:
+        return False
     return var.lower() == 'true'
 
 app = Flask(__name__)
@@ -31,6 +34,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 logger.debug(f"Database path: {db_path}")
 
 db.init_app(app)
+socketio = SocketIO(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -39,13 +43,6 @@ login_manager.login_view = 'login'
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, user_id)
-
-def init_db():
-    with app.app_context():
-        # Ensure instance directory exists
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        db.create_all()
-        sync_abs_users()
 
 def sync_abs_users():
     """Syncs users from ABS to the local database."""
@@ -72,6 +69,13 @@ def sync_abs_users():
         logger.info("Synced users from ABS.")
     except Exception as e:
         logger.error(f"Error syncing users from ABS: {e}")
+
+def init_db():
+    with app.app_context():
+        # Ensure instance directory exists
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        db.create_all()
+        sync_abs_users()
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -181,6 +185,28 @@ def proxy_cover(item_id):
                
     return Response(resp.content, resp.status_code, headers)
 
+# WebSocket Events
+
+@socketio.on('connect')
+def handle_connect():
+    if current_user.is_authenticated:
+        logger.info(f"User connected: {current_user.username}")
+    else:
+        logger.info("Anonymous user connected")
+
+@socketio.on('generate_recommendations')
+@login_required
+def handle_generate_recommendations():
+    try:
+        emit('status', {'message': 'Fetching library data...'})
+        # Generate recommendations using the existing function
+        recs = get_recommendations(USE_GEMINI, user_id=current_user.id, db=db)
+        emit('recommendations', recs)
+        emit('status', {'message': 'Done!'})
+    except Exception as e:
+        logger.error(f"Error generating recommendations: {e}")
+        emit('error', {'message': str(e)})
+
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    socketio.run(app, debug=True)

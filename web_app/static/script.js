@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const loader = generateBtn.querySelector('.loader');
     const btnText = generateBtn.querySelector('.btn-text');
 
+    // Initialize SocketIO
+    const socket = io();
+
     // Check for last recommendations
     fetchLastRecommendations();
 
@@ -23,6 +26,44 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Socket Event Listeners
+
+    socket.on('connect', () => {
+        console.log('Connected to server via WebSocket');
+    });
+
+    socket.on('status', (data) => {
+        console.log('Status:', data.message);
+        btnText.textContent = data.message;
+    });
+
+    socket.on('recommendations', (recommendations) => {
+        // Reset UI state
+        generateBtn.disabled = false;
+        loader.classList.add('hidden');
+        btnText.textContent = 'Generate Recommendations';
+
+        if (recommendations.length === 0) {
+            errorMessage.textContent = 'No recommendations found. Check your library or API key.';
+            errorMessage.classList.remove('hidden');
+            return;
+        }
+
+        renderRecommendations(recommendations);
+        resultsContainer.classList.remove('hidden');
+    });
+
+    socket.on('error', (data) => {
+        console.error('Socket error:', data.message);
+        errorMessage.textContent = data.message;
+        errorMessage.classList.remove('hidden');
+
+        // Reset button
+        generateBtn.disabled = false;
+        loader.classList.add('hidden');
+        btnText.textContent = 'Generate Recommendations';
+    });
+
     generateBtn.addEventListener('click', async () => {
         // Reset state
         resultsContainer.innerHTML = '';
@@ -32,34 +73,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Loading state
         generateBtn.disabled = true;
         loader.classList.remove('hidden');
-        btnText.textContent = 'Generating...';
+        btnText.textContent = 'Initializing...';
 
-        try {
-            const response = await fetch('/api/recommend');
-
-            if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.error || 'Failed to fetch recommendations');
-            }
-
-            const recommendations = await response.json();
-
-            if (recommendations.length === 0) {
-                throw new Error('No recommendations found. Check your library or API key.');
-            }
-
-            renderRecommendations(recommendations);
-            resultsContainer.classList.remove('hidden');
-
-        } catch (error) {
-            errorMessage.textContent = error.message;
-            errorMessage.classList.remove('hidden');
-        } finally {
-            // Reset button
-            generateBtn.disabled = false;
-            loader.classList.add('hidden');
-            btnText.textContent = 'Generate Recommendations';
-        }
+        // Emit event to start generation
+        socket.emit('generate_recommendations');
     });
 
     function renderRecommendations(books) {
