@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from recommend_lib.recommender import get_recommendations
+from recommend_lib.recommender import get_recommendations, get_last_recommendations
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -143,6 +143,19 @@ def recommend():
         recs = get_recommendations(USE_GEMINI, user_id=current_user.id, db=db)
         return jsonify(recs)
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/last_recommendations')
+@login_required
+def last_recommendations():
+    """
+    Returns the last recommendations if they exist
+    """
+    try:
+        recs = get_last_recommendations(user_id=current_user.id, db=db)
+        return jsonify(recs)
+    except Exception as e:
+        logger.error(f"Error fetching last recommendations: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/cover/<item_id>')

@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import Integer, String, ForeignKey
+from sqlalchemy import Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from flask_login import UserMixin
 
@@ -21,4 +21,11 @@ class UserLib(db.Model):
     user_name_debug: Mapped[str] = mapped_column(String(255))
     book_name_debug: Mapped[str] = mapped_column(String(255))
 
+class UserLastRecommendation(db.Model):
+    __tablename__ = "user_last_recommendation"
 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[DateTime] = mapped_column(DateTime)
+    user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.id"))
+    book_id: Mapped[str] = mapped_column(String(255))
+    gemini_reason: Mapped[str] = mapped_column(String(1024))

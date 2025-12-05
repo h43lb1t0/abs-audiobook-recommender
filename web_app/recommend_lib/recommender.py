@@ -3,8 +3,10 @@ from dotenv import load_dotenv
 from typing import List, Dict
 import json
 import os
+from datetime import datetime
+from sqlalchemy import desc
 from flask_sqlalchemy import SQLAlchemy
-from models.db import UserLib
+from models.db import UserLib, UserLastRecommendation
 from recommend_lib.abs_api import get_all_items, get_finished_books
 from recommend_lib.gemini import generate_book_recommendations
 
@@ -165,7 +167,11 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlc
         return []
     
     final_recommendations = []
-        
+
+    # Delete previous recommendations for this user
+    db.session.query(UserLastRecommendation).filter_by(user_id=user_id).delete()
+    db.session.commit()
+    
     for rec in recommendations_raw:
         rec_index = rec.get('id')
         
@@ -179,7 +185,48 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlc
                 'reason': rec.get('reason'),
                 'cover': original_book['cover']
             })
+            
+            db.session.add(UserLastRecommendation(
+                user_id=user_id, 
+                book_id=original_book['id'], 
+                gemini_reason=rec.get('reason'),
+                date=datetime.utcnow()
+            ))
         else:
             logger.warning(f"Invalid index returned by Gemini: {rec_index}")
+            
+    db.session.commit()
                 
+    return final_recommendations
+
+def get_last_recommendations(user_id: str, db: SQLAlchemy) -> List[Dict[str, str]]:
+    """
+    Retrieves the last generated recommendations for the user.
+    """
+    logger.info(f"Fetching last recommendations for user_id: {user_id}")
+    
+    # query DB for recommendations
+    last_recs = db.session.query(UserLastRecommendation).filter_by(user_id=user_id).all()
+    
+    if not last_recs:
+        return []
+        
+    # Get all items to lookup book details
+    items_map, _ = get_all_items()
+    
+    final_recommendations = []
+    
+    for rec in last_recs:
+        if rec.book_id in items_map:
+            book = items_map[rec.book_id]
+            final_recommendations.append({
+                'id': rec.book_id,
+                'title': book['title'],
+                'author': book['author'],
+                'reason': rec.gemini_reason,
+                'cover': book.get('cover') # Assuming get_all_items or the map has cover info, checked previously it does
+            })
+        else:
+            logger.warning(f"Book ID {rec.book_id} from saved recommendations not found in current library items.")
+            
     return final_recommendations

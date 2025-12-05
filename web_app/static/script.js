@@ -5,6 +5,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const loader = generateBtn.querySelector('.loader');
     const btnText = generateBtn.querySelector('.btn-text');
 
+    // Check for last recommendations
+    fetchLastRecommendations();
+
+    async function fetchLastRecommendations() {
+        try {
+            const response = await fetch('/api/last_recommendations');
+            if (response.ok) {
+                const recommendations = await response.json();
+                if (recommendations.length > 0) {
+                    renderRecommendations(recommendations);
+                    resultsContainer.classList.remove('hidden');
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch last recommendations:', error);
+        }
+    }
+
     generateBtn.addEventListener('click', async () => {
         // Reset state
         resultsContainer.innerHTML = '';
