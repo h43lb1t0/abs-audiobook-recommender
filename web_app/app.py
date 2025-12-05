@@ -57,22 +57,14 @@ def sync_abs_users():
                 hashed_password = generate_password_hash(abs_user['username'])
                 new_user = User(
                     id=abs_user['id'], 
-                    username=abs_user['username'], 
+                    username=abs_user['username'].lower(), 
                     password=hashed_password
                 )
                 db.session.add(new_user)
             else:
                 logger.info(f"Updating existing user: {abs_user['username']}")
                 # Update username if changed
-                user.username = abs_user['username']
-                
-                # Check if the current password is the plain text username (migration/first run with existing db)
-                if user.password == abs_user['username']:
-                     logger.debug(f"Migrating password for {user.username} to hash.")
-                     user.password = generate_password_hash(abs_user['username'])
-                
-                # If the password is NOT the username, we assume the user changed it, so we DO NOT overwrite it.
-        
+                user.username = abs_user['username'].lower()
         db.session.commit()
         logger.info("Synced users from ABS.")
     except Exception as e:
@@ -81,7 +73,7 @@ def sync_abs_users():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
+        username = request.form.get('username').lower()
         password = request.form.get('password')
 
         logger.debug(f"Login attempt for username: {username}")
@@ -90,15 +82,8 @@ def login():
         
         if user:
             logger.debug(f"User found: {user.username}, ID: {user.id}")
-            # Check if password matches hash OR if it matches plain text (backward compatibility during migration)
             if check_password_hash(user.password, password) or user.password == password:
                 logger.debug("Password match. Logging in.")
-
-                # If it matched plain text, upgrade to hash immediately
-                if user.password == password:
-                     logger.debug("Upgrading plain text password to hash on login.")
-                     user.password = generate_password_hash(password)
-                     db.session.commit()
 
                 login_user(user)
                 return redirect(url_for('index'))
