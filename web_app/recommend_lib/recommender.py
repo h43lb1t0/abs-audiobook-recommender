@@ -50,6 +50,8 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlc
     existing_books = db.session.query(UserLib.book_id).filter_by(user_id=user_id).all()
     existing_book_ids = {b[0] for b in existing_books}
 
+    new_books_found = False
+
     for item_id in finished_ids:
         if item_id in items_map:
             book = items_map[item_id]
@@ -57,6 +59,7 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlc
             if item_id not in existing_book_ids:
                 db.session.add(UserLib(user_id=user_id, book_id=item_id, user_name_debug=user_id, book_name_debug=book['title']))
                 existing_book_ids.add(item_id)
+                new_books_found = True
     db.session.commit()
 
     unread_books = [] # List of (index, book)
@@ -78,6 +81,7 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlc
             if item_id not in existing_book_ids:
                 db.session.add(UserLib(user_id=user_id, book_id=item_id, user_name_debug=user_id, book_name_debug=book['title']))
                 existing_book_ids.add(item_id)
+                new_books_found = True
             continue
             
         if (book['title'], book['author']) in finished_keys:
@@ -91,6 +95,11 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlc
             standalone_candidates.append(book)
     db.session.commit()
     
+    if new_books_found:
+        logger.info("New finished or in-progress books found, generating recommendations")
+    else:
+        logger.info("No new finished or in-progress books found, skipping recommendations")
+        return []    
     # Process series to find the next unread book
     for series_name, books in series_candidates.items():
         # Try to parse sequences
@@ -147,7 +156,7 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlc
 
     prompt = prompt_string.format(finished_str=finished_str, unread_str=unread_str)
 
-    logger.info(f"Prompt: {prompt}")
+    logger.debug(f"Prompt: {prompt}")
 
     if not use_gemini:
         logger.warning("Gemini is not enabled, skipping recommendation generation")
@@ -224,7 +233,8 @@ def get_last_recommendations(user_id: str, db: SQLAlchemy) -> List[Dict[str, str
                 'title': book['title'],
                 'author': book['author'],
                 'reason': rec.gemini_reason,
-                'cover': book.get('cover') # Assuming get_all_items or the map has cover info, checked previously it does
+                'cover': book.get('cover'),
+                'date': rec.date
             })
         else:
             logger.warning(f"Book ID {rec.book_id} from saved recommendations not found in current library items.")

@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (recommendations.length === 0) {
             errorMessage.textContent = 'No recommendations found. Check your library or API key.';
             errorMessage.classList.remove('hidden');
-            return;
+            return fetchLastRecommendations();
         }
 
         renderRecommendations(recommendations);
@@ -80,6 +80,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function renderRecommendations(books) {
+        const lastUpdatedElement = document.getElementById('last-updated');
+        const lastUpdated = books[0].date;
+        lastUpdatedElement.textContent = lastUpdated;
         books.forEach(book => {
             const card = document.createElement('div');
             card.className = 'card';
