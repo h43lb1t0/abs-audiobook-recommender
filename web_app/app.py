@@ -11,7 +11,7 @@ from recommend_lib.recommender import get_recommendations
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 from recommend_lib.abs_api import get_abs_users
-from db import db, User
+from models.db import db, User
 
 load_dotenv()
 
@@ -140,7 +140,7 @@ def recommend():
     Returns the recommendations
     """
     try:
-        recs = get_recommendations(USE_GEMINI, user_id=current_user.id)
+        recs = get_recommendations(USE_GEMINI, user_id=current_user.id, db=db)
         return jsonify(recs)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

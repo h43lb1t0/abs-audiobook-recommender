@@ -15,8 +15,10 @@ class User(UserMixin, db.Model):
 class UserLib(db.Model):
     __tablename__ = "user_lib"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.id"))
     book_id: Mapped[str] = mapped_column(String(255))
+    user_name_debug: Mapped[str] = mapped_column(String(255))
+    book_name_debug: Mapped[str] = mapped_column(String(255))
 
 

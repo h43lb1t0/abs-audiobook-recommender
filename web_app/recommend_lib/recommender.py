@@ -3,7 +3,8 @@ from dotenv import load_dotenv
 from typing import List, Dict
 import json
 import os
-
+from flask_sqlalchemy import SQLAlchemy
+from models.db import UserLib
 from recommend_lib.abs_api import get_all_items, get_finished_books
 from recommend_lib.gemini import generate_book_recommendations
 
@@ -30,7 +31,7 @@ def _load_language_file(language: str) -> str:
     
     return content
 
-def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Dict[str, str]]:
+def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlchemy = None) -> List[Dict[str, str]]:
     """
     Returns the recommendations
 
@@ -44,10 +45,17 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Di
     items_map, series_counts = get_all_items()
     finished_ids, in_progress_ids, finished_keys = get_finished_books(items_map, user_id)
     
+    existing_books = db.session.query(UserLib.book_id).filter_by(user_id=user_id).all()
+    existing_book_ids = {b[0] for b in existing_books}
+
     for item_id in finished_ids:
         if item_id in items_map:
             book = items_map[item_id]
             finished_keys.add((book['title'], book['author']))
+            if item_id not in existing_book_ids:
+                db.session.add(UserLib(user_id=user_id, book_id=item_id, user_name_debug=user_id, book_name_debug=book['title']))
+                existing_book_ids.add(item_id)
+    db.session.commit()
 
     unread_books = [] # List of (index, book)
     finished_books_list = []
@@ -65,6 +73,9 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Di
         
         if item_id in in_progress_ids:
             logger.debug(f"Skipping in-progress book: {book['title']}")
+            if item_id not in existing_book_ids:
+                db.session.add(UserLib(user_id=user_id, book_id=item_id, user_name_debug=user_id, book_name_debug=book['title']))
+                existing_book_ids.add(item_id)
             continue
             
         if (book['title'], book['author']) in finished_keys:
@@ -76,6 +87,7 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Di
             series_candidates[book['series']].append(book)
         else:
             standalone_candidates.append(book)
+    db.session.commit()
     
     # Process series to find the next unread book
     for series_name, books in series_candidates.items():
@@ -104,10 +116,14 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Di
         book['_index'] = current_index
         unread_books.append(book)
         current_index += 1
+
+    # Add finished books to the DB
+
     
     finished_str = ""
     for book in finished_books_list:
         finished_str += f"- {book['title']} by {book['author']}\n"
+
             
     unread_str = ""
     for book in unread_books:
