@@ -5,14 +5,22 @@ import json
 import os
 from datetime import datetime
 from random import randint
+import math
 from sqlalchemy import desc
 from flask_sqlalchemy import SQLAlchemy
-from models.db import UserLib, UserLastRecommendation
+from models.db import User, UserLib, UserLastRecommendation
 from recommend_lib.abs_api import get_all_items, get_finished_books
 from recommend_lib.gemini import generate_book_recommendations
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def calculate_max_recommendations_per_user_per_day(db, max_total_recommendations: int = 50) -> int:
+    num_users = db.session.query(User).count()
+    max_recommendations_per_user = math.floor(max_total_recommendations / num_users)
+    
+    return max_recommendations_per_user
+    
 
 
 MOCK_BOOKS = {
@@ -106,6 +114,28 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlc
 
     logger.info(f"Getting recommendations for user_id: {user_id}")
     load_dotenv()
+
+    # Rate Limiting Check
+    user = db.session.get(User, user_id)
+    if user:
+        today = datetime.utcnow().date()
+        if user.last_recommendation_date is None or user.last_recommendation_date.date() != today:
+            current_last_date = user.last_recommendation_date.date() if user.last_recommendation_date else None
+            if current_last_date != today:
+                logger.info(f"Resetting daily recommendation count for user {user_id}")
+                user.daily_recommendation_count = 0
+                user.last_recommendation_date = datetime.utcnow()
+                pass
+
+        max_recs = calculate_max_recommendations_per_user_per_day(db)
+        
+        last_date = user.last_recommendation_date
+        if last_date is None or last_date.date() != today:
+             user.daily_recommendation_count = 0
+        
+        if user.daily_recommendation_count >= max_recs:
+            logger.warning(f"User {user_id} reached daily recommendation limit ({max_recs}). Skipping.")
+            return ([], "Daily limit reached")
 
     items_map, series_counts = get_all_items()
     finished_ids, in_progress_ids, finished_keys = get_finished_books(items_map, user_id)
@@ -223,6 +253,13 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlc
 
     if not use_gemini:
         logger.warning("Gemini is not enabled, skipping recommendation generation")
+        
+        # Increment count for mock too, so we can test the limit logic
+        if user:
+             user.daily_recommendation_count += 1
+             user.last_recommendation_date = datetime.utcnow()
+        db.session.commit()
+        
         return (create_mock_recommendations(db, user_id), "Gemini is not enabled")
     
     recs = generate_book_recommendations(prompt)
@@ -267,6 +304,11 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlc
         else:
             logger.warning(f"Invalid index returned by Gemini: {rec_index}")
             
+    # Update user rate limit stats
+    if user:
+         user.daily_recommendation_count += 1
+         user.last_recommendation_date = datetime.utcnow()
+         
     db.session.commit()
                 
     return (final_recommendations, "Updated")

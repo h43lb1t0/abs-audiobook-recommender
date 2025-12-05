@@ -24,6 +24,7 @@ def bool_from_env(var):
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key") # Needed for sessions
 ABS_URL = os.getenv("ABS_URL")
+ABS_FETCH_INTERVAL = int(os.getenv("ABS_FETCH_INTERVAL", 5))
 ABS_TOKEN = os.getenv("ABS_TOKEN")
 USE_GEMINI = bool_from_env(os.getenv("USE_GEMINI"))
 
@@ -238,9 +239,6 @@ def scheduled_recommendation_task():
                     logger.error(f"Error generating recommendations for user {user.username}: {e}")
                     status = "Error"
                 
-                # Wait 2 minutes between users to avoid overloading API, 
-                # but ONLY if we actually did something (status != "No Update")
-                # and if it's not the last user.
                 if i < len(users) - 1:
                     if status == "No Update":
                         logger.info("No updates found, skipping sleep period.")
@@ -254,9 +252,7 @@ def scheduled_recommendation_task():
 if __name__ == '__main__':
     init_db()
     
-    # Configure Scheduler
-    # Run every 5 minutes
-    scheduler.add_job(id='scheduled_recommendation_task', func=scheduled_recommendation_task, trigger='interval', minutes=1, max_instances=1, coalesce=True)
+    scheduler.add_job(id='scheduled_recommendation_task', func=scheduled_recommendation_task, trigger='interval', minutes=ABS_FETCH_INTERVAL, max_instances=1, coalesce=True)
     scheduler.init_app(app)
     scheduler.start()
     

@@ -11,6 +11,8 @@ class User(UserMixin, db.Model):
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
     username: Mapped[str] = mapped_column(String(255), unique=True)
     password: Mapped[str] = mapped_column(String(255))
+    daily_recommendation_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_recommendation_date: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
 
 class UserLib(db.Model):
     __tablename__ = "user_lib"
