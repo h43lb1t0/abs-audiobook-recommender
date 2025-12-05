@@ -15,11 +15,14 @@ from db import db, User
 
 load_dotenv()
 
+def bool_from_env(var):
+    return var.lower() == 'true'
+
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key") # Needed for sessions
 ABS_URL = os.getenv("ABS_URL")
 ABS_TOKEN = os.getenv("ABS_TOKEN")
-USE_GEMINI = bool(os.getenv("USE_GEMINI", True))
+USE_GEMINI = bool_from_env(os.getenv("USE_GEMINI"))
 
 # Use absolute path for database to avoid instance path confusion
 basedir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
