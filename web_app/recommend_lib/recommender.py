@@ -123,9 +123,9 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Di
 
 
     
-    Language_setting = os.getenv('LANGUAGE', 'de').lower()
+    language_setting = os.getenv('LANGUAGE', 'de').lower()
 
-    prompt_string = _load_language_file(Language_setting)
+    prompt_string = _load_language_file(language_setting)
 
     prompt = prompt_string.format(finished_str=finished_str, unread_str=unread_str)
 
