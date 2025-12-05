@@ -19,6 +19,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key") # Needed for sessions
 ABS_URL = os.getenv("ABS_URL")
 ABS_TOKEN = os.getenv("ABS_TOKEN")
+USE_GEMINI = bool(os.getenv("USE_GEMINI", True))
 
 # Use absolute path for database to avoid instance path confusion
 basedir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -151,7 +152,7 @@ def recommend():
     Returns the recommendations
     """
     try:
-        recs = get_recommendations(False, user_id=current_user.id)
+        recs = get_recommendations(USE_GEMINI, user_id=current_user.id)
         return jsonify(recs)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
