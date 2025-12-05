@@ -5,20 +5,28 @@ import logging
 from dotenv import load_dotenv
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_socketio import SocketIO, emit, join_room
 
-from recommend_lib.recommender import get_recommendations
+from recommend_lib.recommender import get_recommendations, get_last_recommendations
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 from recommend_lib.abs_api import get_abs_users
-from db import db, User
+from models.db import db, User
 
 load_dotenv()
+
+def bool_from_env(var):
+    if var is None:
+        return False
+    return var.lower() == 'true'
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key") # Needed for sessions
 ABS_URL = os.getenv("ABS_URL")
+ABS_FETCH_INTERVAL = int(os.getenv("ABS_FETCH_INTERVAL", 5))
 ABS_TOKEN = os.getenv("ABS_TOKEN")
+USE_GEMINI = bool_from_env(os.getenv("USE_GEMINI"))
 
 # Use absolute path for database to avoid instance path confusion
 basedir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -27,6 +35,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 logger.debug(f"Database path: {db_path}")
 
 db.init_app(app)
+socketio = SocketIO(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -35,13 +44,6 @@ login_manager.login_view = 'login'
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, user_id)
-
-def init_db():
-    with app.app_context():
-        # Ensure instance directory exists
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        db.create_all()
-        sync_abs_users()
 
 def sync_abs_users():
     """Syncs users from ABS to the local database."""
@@ -56,31 +58,30 @@ def sync_abs_users():
                 hashed_password = generate_password_hash(abs_user['username'])
                 new_user = User(
                     id=abs_user['id'], 
-                    username=abs_user['username'], 
+                    username=abs_user['username'].lower(), 
                     password=hashed_password
                 )
                 db.session.add(new_user)
             else:
                 logger.info(f"Updating existing user: {abs_user['username']}")
                 # Update username if changed
-                user.username = abs_user['username']
-                
-                # Check if the current password is the plain text username (migration/first run with existing db)
-                if user.password == abs_user['username']:
-                     logger.debug(f"Migrating password for {user.username} to hash.")
-                     user.password = generate_password_hash(abs_user['username'])
-                
-                # If the password is NOT the username, we assume the user changed it, so we DO NOT overwrite it.
-        
+                user.username = abs_user['username'].lower()
         db.session.commit()
         logger.info("Synced users from ABS.")
     except Exception as e:
         logger.error(f"Error syncing users from ABS: {e}")
 
+def init_db():
+    with app.app_context():
+        # Ensure instance directory exists
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        db.create_all()
+        sync_abs_users()
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
+        username = request.form.get('username').lower()
         password = request.form.get('password')
 
         logger.debug(f"Login attempt for username: {username}")
@@ -89,15 +90,8 @@ def login():
         
         if user:
             logger.debug(f"User found: {user.username}, ID: {user.id}")
-            # Check if password matches hash OR if it matches plain text (backward compatibility during migration)
             if check_password_hash(user.password, password) or user.password == password:
                 logger.debug("Password match. Logging in.")
-
-                # If it matched plain text, upgrade to hash immediately
-                if user.password == password:
-                     logger.debug("Upgrading plain text password to hash on login.")
-                     user.password = generate_password_hash(password)
-                     db.session.commit()
 
                 login_user(user)
                 return redirect(url_for('index'))
@@ -151,9 +145,22 @@ def recommend():
     Returns the recommendations
     """
     try:
-        recs = get_recommendations(user_id=current_user.id)
+        recs = get_recommendations(USE_GEMINI, user_id=current_user.id, db=db)
         return jsonify(recs)
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/last_recommendations')
+@login_required
+def last_recommendations():
+    """
+    Returns the last recommendations if they exist
+    """
+    try:
+        recs = get_last_recommendations(user_id=current_user.id, db=db)
+        return jsonify(recs)
+    except Exception as e:
+        logger.error(f"Error fetching last recommendations: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/cover/<item_id>')
@@ -179,6 +186,75 @@ def proxy_cover(item_id):
                
     return Response(resp.content, resp.status_code, headers)
 
+# WebSocket Events
+
+@socketio.on('connect')
+def handle_connect():
+    if current_user.is_authenticated:
+        logger.info(f"User connected: {current_user.username}")
+        join_room(f"user_{current_user.id}")
+    else:
+        logger.info("Anonymous user connected")
+
+@socketio.on('generate_recommendations')
+@login_required
+def handle_generate_recommendations():
+    try:
+        emit('status', {'message': 'Fetching library data...'})
+        # Generate recommendations using the existing function
+        recs, status = get_recommendations(USE_GEMINI, user_id=current_user.id, db=db)
+        emit('recommendations', recs)
+        emit('status', {'message': 'Done!'})
+    except Exception as e:
+        logger.error(f"Error generating recommendations: {e}")
+        emit('error', {'message': str(e)})
+
+# Initialize Scheduler
+from flask_apscheduler import APScheduler
+import time
+
+scheduler = APScheduler()
+
+def scheduled_recommendation_task():
+    """
+    Background task to generate recommendations for all users.
+    Runs every 5 minutes (configured below), but sequentially with a 2-minute pause between users.
+    """
+    with app.app_context():
+        logger.info("Starting scheduled recommendation task...")
+        try:
+            users = db.session.query(User).all()
+            for i, user in enumerate(users):
+                logger.info(f"Processing recommendations for user: {user.username} ({user.id})")
+                try:
+                    recs, status = get_recommendations(USE_GEMINI, user_id=user.id, db=db)
+                    logger.info(f"Recommendation status for {user.username}: {status}")
+                    
+                    if status != "No Update":
+                         # Emit to the user's room
+                        logger.info(f"Emitting recommendations to user_{user.id}")
+                        socketio.emit('recommendations', recs, room=f"user_{user.id}")
+
+                except Exception as e:
+                    logger.error(f"Error generating recommendations for user {user.username}: {e}")
+                    status = "Error"
+                
+                if i < len(users) - 1:
+                    if status == "No Update":
+                        logger.info("No updates found, skipping sleep period.")
+                    else:
+                        logger.info("Waiting 2 minutes before next user...")
+                        time.sleep(120)
+        except Exception as e:
+            logger.error(f"Error in scheduled task: {e}")
+        logger.info("Scheduled recommendation task finished.")
+
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    
+    scheduler.add_job(id='scheduled_recommendation_task', func=scheduled_recommendation_task, trigger='interval', minutes=ABS_FETCH_INTERVAL, max_instances=1, coalesce=True)
+    scheduler.init_app(app)
+    scheduler.start()
+    
+    socketio.run(app, debug=True, use_reloader=False) # use_reloader=False prevents double execution of scheduler
+
