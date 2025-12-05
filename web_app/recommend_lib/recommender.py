@@ -4,6 +4,7 @@ from typing import List, Dict
 import json
 import os
 from datetime import datetime
+from random import randint
 from sqlalchemy import desc
 from flask_sqlalchemy import SQLAlchemy
 from models.db import UserLib, UserLastRecommendation
@@ -12,6 +13,68 @@ from recommend_lib.gemini import generate_book_recommendations
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+MOCK_BOOKS = {
+    'mock-1': {
+        'title': 'The Invisible Library',
+        'author': 'Genevieve Cogman',
+        'cover': None,
+        'description': 'Irene is a professional spy for the mysterious Library, which harvests fiction from different realities.'
+    },
+    'mock-2': {
+        'title': 'Project Hail Mary',
+        'author': 'Andy Weir',
+        'cover': None,
+        'description': 'Ryland Grace is the sole survivor on a desperate, last-chance mission—and if he fails, humanity and the earth itself will perish.'
+    },
+    'mock-3': {
+        'title': 'The Midnight Library',
+        'author': 'Matt Haig',
+        'cover': None,
+        'description': 'Between life and death there is a library, and within that library, the shelves go on forever. Every book provides a chance to try another life you could have lived.'
+    }
+}
+
+def create_mock_recommendations(db: SQLAlchemy, user_id: str) -> List[Dict[str, str]]:
+    """
+    Mocks the response from the Gemini API using hardcoded mock books.
+    """
+    logger.info(f"Generating mock recommendations for user_id: {user_id}")
+    
+    # Delete previous recommendations for this user
+    db.session.query(UserLastRecommendation).filter_by(user_id=user_id).delete()
+    db.session.commit()
+
+    final_recommendations = []
+    
+    for book_id, book_data in MOCK_BOOKS.items():
+        reason = f"Mock reason: Because you might like '{book_data['title']}' based on your reading history."
+        
+        # Generate a random seed for this recommendation
+        seed = randint(1, 100)
+        
+        # Create a composite ID to store the seed: "book_id|seed"
+        composite_id = f"{book_id}|{seed}"
+        
+        final_recommendations.append({
+            'id': book_id, # Frontend still sees the clean ID
+            'title': f"{book_data['title']} {seed}",
+            'author': book_data['author'],
+            'reason': reason,
+            'cover': book_data['cover']
+        })
+        
+        db.session.add(UserLastRecommendation(
+            user_id=user_id, 
+            book_id=composite_id,  # Save composite ID to DB
+            gemini_reason=reason,
+            date=datetime.utcnow()
+        ))
+        
+    db.session.commit()
+
+    return final_recommendations
 
 def _load_language_file(language: str) -> str:
     """
@@ -99,7 +162,7 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlc
         logger.info("New finished or in-progress books found, generating recommendations")
     else:
         logger.info("No new finished or in-progress books found, skipping recommendations")
-        return []    
+        return ([], "No Update")    
     # Process series to find the next unread book
     for series_name, books in series_candidates.items():
         # Try to parse sequences
@@ -160,20 +223,20 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlc
 
     if not use_gemini:
         logger.warning("Gemini is not enabled, skipping recommendation generation")
-        return []
+        return (create_mock_recommendations(db, user_id), "Gemini is not enabled")
     
     recs = generate_book_recommendations(prompt)
 
     if not recs:
         logger.error("No recommendations generated")
-        return []
+        return ([], "No recommendations generated")
 
     try:
         parsed_recs = json.loads(recs.text)
         recommendations_raw = parsed_recs.get('items', [])
     except Exception as e:
         logger.error(f"Error parsing Gemini response: {e}")
-        return []
+        return ([], "Error parsing Gemini response")
     
     final_recommendations = []
 
@@ -206,7 +269,7 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None, db: SQLAlc
             
     db.session.commit()
                 
-    return final_recommendations
+    return (final_recommendations, "Updated")
 
 def get_last_recommendations(user_id: str, db: SQLAlchemy) -> List[Dict[str, str]]:
     """
@@ -236,7 +299,36 @@ def get_last_recommendations(user_id: str, db: SQLAlchemy) -> List[Dict[str, str
                 'cover': book.get('cover'),
                 'date': rec.date
             })
+        elif rec.book_id in MOCK_BOOKS:
+            # Handle legacy mock IDs (without seed)
+            book = MOCK_BOOKS[rec.book_id]
+            final_recommendations.append({
+                'id': rec.book_id,
+                'title': book['title'], # No seed info available for legacy
+                'author': book['author'],
+                'reason': rec.gemini_reason,
+                'cover': book['cover'],
+                'date': rec.date
+            })
         else:
+            # Check for composite mock ID (e.g. "mock-1|42")
+            if '|' in rec.book_id:
+                parts = rec.book_id.split('|')
+                if len(parts) == 2:
+                    base_id = parts[0]
+                    seed = parts[1]
+                    
+                    if base_id in MOCK_BOOKS:
+                        book = MOCK_BOOKS[base_id]
+                        final_recommendations.append({
+                            'id': base_id, # Return clean ID to frontend
+                            'title': f"{book['title']} {seed}",
+                            'author': book['author'],
+                            'reason': rec.gemini_reason,
+                            'cover': book['cover'],
+                            'date': rec.date
+                        })
+                        continue
+
             logger.warning(f"Book ID {rec.book_id} from saved recommendations not found in current library items.")
-            
     return final_recommendations

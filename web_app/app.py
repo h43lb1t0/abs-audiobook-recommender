@@ -5,7 +5,7 @@ import logging
 from dotenv import load_dotenv
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room
 
 from recommend_lib.recommender import get_recommendations, get_last_recommendations
 
@@ -191,6 +191,7 @@ def proxy_cover(item_id):
 def handle_connect():
     if current_user.is_authenticated:
         logger.info(f"User connected: {current_user.username}")
+        join_room(f"user_{current_user.id}")
     else:
         logger.info("Anonymous user connected")
 
@@ -200,13 +201,64 @@ def handle_generate_recommendations():
     try:
         emit('status', {'message': 'Fetching library data...'})
         # Generate recommendations using the existing function
-        recs = get_recommendations(USE_GEMINI, user_id=current_user.id, db=db)
+        recs, status = get_recommendations(USE_GEMINI, user_id=current_user.id, db=db)
         emit('recommendations', recs)
         emit('status', {'message': 'Done!'})
     except Exception as e:
         logger.error(f"Error generating recommendations: {e}")
         emit('error', {'message': str(e)})
 
+# Initialize Scheduler
+from flask_apscheduler import APScheduler
+import time
+
+scheduler = APScheduler()
+
+def scheduled_recommendation_task():
+    """
+    Background task to generate recommendations for all users.
+    Runs every 5 minutes (configured below), but sequentially with a 2-minute pause between users.
+    """
+    with app.app_context():
+        logger.info("Starting scheduled recommendation task...")
+        try:
+            users = db.session.query(User).all()
+            for i, user in enumerate(users):
+                logger.info(f"Processing recommendations for user: {user.username} ({user.id})")
+                try:
+                    recs, status = get_recommendations(USE_GEMINI, user_id=user.id, db=db)
+                    logger.info(f"Recommendation status for {user.username}: {status}")
+                    
+                    if status != "No Update":
+                         # Emit to the user's room
+                        logger.info(f"Emitting recommendations to user_{user.id}")
+                        socketio.emit('recommendations', recs, room=f"user_{user.id}")
+
+                except Exception as e:
+                    logger.error(f"Error generating recommendations for user {user.username}: {e}")
+                    status = "Error"
+                
+                # Wait 2 minutes between users to avoid overloading API, 
+                # but ONLY if we actually did something (status != "No Update")
+                # and if it's not the last user.
+                if i < len(users) - 1:
+                    if status == "No Update":
+                        logger.info("No updates found, skipping sleep period.")
+                    else:
+                        logger.info("Waiting 2 minutes before next user...")
+                        time.sleep(120)
+        except Exception as e:
+            logger.error(f"Error in scheduled task: {e}")
+        logger.info("Scheduled recommendation task finished.")
+
 if __name__ == '__main__':
     init_db()
-    socketio.run(app, debug=True)
+    
+    # Configure Scheduler
+    # Run every 5 minutes
+    scheduler.add_job(id='scheduled_recommendation_task', func=scheduled_recommendation_task, trigger='interval', minutes=1, max_instances=1, coalesce=True)
+    scheduler.init_app(app)
+    scheduler.start()
+    
+    socketio.run(app, debug=True, use_reloader=False) # use_reloader=False prevents double execution of scheduler
+

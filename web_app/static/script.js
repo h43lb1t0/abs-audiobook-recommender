@@ -1,9 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const generateBtn = document.getElementById('generate-btn');
+    // const generateBtn = document.getElementById('generate-btn');
     const resultsContainer = document.getElementById('results');
     const errorMessage = document.getElementById('error-message');
-    const loader = generateBtn.querySelector('.loader');
-    const btnText = generateBtn.querySelector('.btn-text');
+    // const loader = generateBtn.querySelector('.loader');
+    // const btnText = generateBtn.querySelector('.btn-text');
 
     // Initialize SocketIO
     const socket = io();
@@ -34,14 +34,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('status', (data) => {
         console.log('Status:', data.message);
-        btnText.textContent = data.message;
+        // btnText.textContent = data.message;
     });
 
     socket.on('recommendations', (recommendations) => {
         // Reset UI state
-        generateBtn.disabled = false;
-        loader.classList.add('hidden');
-        btnText.textContent = 'Generate Recommendations';
+        // generateBtn.disabled = false;
+        // loader.classList.add('hidden');
+        // btnText.textContent = 'Generate Recommendations';
 
         if (recommendations.length === 0) {
             errorMessage.textContent = 'No recommendations found. Check your library or API key.';
@@ -59,11 +59,12 @@ document.addEventListener('DOMContentLoaded', () => {
         errorMessage.classList.remove('hidden');
 
         // Reset button
-        generateBtn.disabled = false;
-        loader.classList.add('hidden');
-        btnText.textContent = 'Generate Recommendations';
+        // generateBtn.disabled = false;
+        // loader.classList.add('hidden');
+        // btnText.textContent = 'Generate Recommendations';
     });
 
+    /*
     generateBtn.addEventListener('click', async () => {
         // Reset state
         resultsContainer.innerHTML = '';
@@ -78,11 +79,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // Emit event to start generation
         socket.emit('generate_recommendations');
     });
+    */
 
     function renderRecommendations(books) {
         const lastUpdatedElement = document.getElementById('last-updated');
         const lastUpdated = books[0].date;
         lastUpdatedElement.textContent = lastUpdated;
+
+        // Clear previous results
+        resultsContainer.innerHTML = '';
+
         books.forEach(book => {
             const card = document.createElement('div');
             card.className = 'card';
