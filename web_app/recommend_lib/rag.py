@@ -148,3 +148,40 @@ class RAGSystem:
         if results and results['ids']:
             return results['ids'][0]
         return []
+
+    def get_embeddings(self, ids: List[str]) -> List[List[float]]:
+        """
+        Retrieves embeddings for a list of item IDs.
+        """
+        if not ids:
+            return []
+            
+        results = self.collection.get(
+            ids=ids,
+            include=['embeddings']
+        )
+        
+        # Depending on chromadb version, embeddings might be None if not found.
+        embeddings = results.get('embeddings')
+        if embeddings is not None and len(embeddings) > 0:
+            # Ensure it is a list of lists, not numpy array
+            if hasattr(embeddings, 'tolist'):
+                 return embeddings.tolist()
+            return embeddings
+        return []
+
+    def retrieve_by_embedding(self, query_embedding: List[float], n_results: int = 50) -> List[str]:
+        """
+        Retrieves similar items based on a query embedding vector.
+        """
+        if self.collection.count() == 0:
+            return []
+
+        results = self.collection.query(
+            query_embeddings=[query_embedding],
+            n_results=n_results
+        )
+        
+        if results and results['ids']:
+            return results['ids'][0]
+        return []

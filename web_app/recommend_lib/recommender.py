@@ -1,11 +1,13 @@
 import logging
 from dotenv import load_dotenv
-from typing import List, Dict
+from typing import List, Dict, Tuple, Set, Optional
 import json
 import os
+from collections import Counter
 
 from recommend_lib.abs_api import get_all_items, get_finished_books
 from recommend_lib.llm import generate_book_recommendations
+from recommend_lib.rag import get_rag_system
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,9 +33,95 @@ def _load_language_file(language: str, type: str) -> str:
     
     return content
 
-def get_recommendations(use_llm: bool = True, user_id: str = None) -> List[Dict[str, str]]:
+def rank_candidates(
+    unread_books: List[Dict],
+    finished_books: List[Dict],
+    top_genres: Set[str],
+    top_authors: Set[str]
+) -> List[Dict]:
+    """
+    Ranks unread books based on RAG similarity to finished books and user preferences.
+    Uses Mean Pooling of finished books to query RAG.
+    Annotates books with '_rag_score' and '_match_reasons'.
+    """
+    
+    # Initialize RAG
+    rag = get_rag_system()
+    
+    # 1. Get embeddings for seed books
+    seed_ids = [book['id'] for book in finished_books if book.get('id')]
+    seed_embeddings = rag.get_embeddings(seed_ids)
+    
+    candidate_match_counts = Counter()
+    # Note: With mean pooling, we lose the direct "this book matched that book" mapping 
+    # unless we do a second pass or keep the old logic. 
+    # For now, we'll lose the granular "matched because of X" specific book reason in this step,
+    # but we can infer it or just use generic "High similarity to your library".
+    
+    if seed_embeddings and len(seed_embeddings) > 0:
+        # 2. Calculate Mean Vector
+        # Assuming all embeddings are same length.
+        # Simple average.
+        vector_length = len(seed_embeddings[0])
+        mean_vector = [0.0] * vector_length
+        
+        for emb in seed_embeddings:
+            for i, val in enumerate(emb):
+                mean_vector[i] += val
+                
+        for i in range(vector_length):
+            mean_vector[i] /= len(seed_embeddings)
+            
+        logger.info(f"Calculated mean vector from {len(seed_embeddings)} seed books.")
+        
+        # 3. Query RAG with mean vector
+        # Fetch more results since this is a broad query
+        similar_ids = rag.retrieve_by_embedding(mean_vector, n_results=100)
+        
+        # Create a score map from the order (higher rank = better)
+        # similar_ids is ordered by similarity
+        for idx, sid in enumerate(similar_ids):
+            # Linearly decreasing score based on rank
+            # e.g. 1st = 100, 2nd = 99...
+            score = max(0, 100 - idx) 
+            candidate_match_counts[sid] = score
+
+    ranked_books = []
+
+    for book in unread_books:
+        book_id = book['id']
+        match_score = candidate_match_counts.get(book_id, 0)
+        
+        # Calculate preference bonus
+        pref_score = 0
+        for genre in book.get('genres', []):
+            if genre in top_genres:
+                pref_score += 10 # Boost genres
+        if book.get('author', '') in top_authors:
+            pref_score += 15 # Boost authors
+            
+        total_score = match_score + pref_score
+        
+        book['_rag_score'] = total_score
+        # For mean pooling, we don't have specific seed book matches easily. 
+        # We can leave this empty or populate with a generic reason later.
+        book['_match_reasons'] = [] 
+        
+        ranked_books.append(book)
+
+    # Sort by score descending
+    ranked_books.sort(key=lambda x: -x.get('_rag_score', 0))
+    
+    return ranked_books
+
+def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict[str, str]]:
     """
     Returns the recommendations
+    
+    Args:
+        use_llm (bool): Whether to use the LLM to generate recommendations/reasons. 
+                        If False, returns RAG-based recommendations with static reasons.
+        user_id (str): The user ID (optional)
 
     Returns:
         List[Dict[str, str]]: The recommendations
@@ -43,17 +131,21 @@ def get_recommendations(use_llm: bool = True, user_id: str = None) -> List[Dict[
     load_dotenv()
 
     items_map, series_counts = get_all_items()
+    
+    # Update RAG index with all items
+    rag = get_rag_system()
+    rag.index_library(items_map)
+
     finished_ids, in_progress_ids, finished_keys = get_finished_books(items_map, user_id)
     
+    cleaned_finished_keys = set()
     for item_id in finished_ids:
         if item_id in items_map:
             book = items_map[item_id]
-            finished_keys.add((book['title'], book['author']))
+            cleaned_finished_keys.add((book['title'], book['author']))
 
-    unread_books = [] # List of (index, book)
+    unread_books_candidates = [] # List of book dicts
     finished_books_list = []
-    
-    current_index = 0
     
     # Group unread books by series to find the next sequence
     series_candidates = {}
@@ -65,10 +157,9 @@ def get_recommendations(use_llm: bool = True, user_id: str = None) -> List[Dict[
             continue
         
         if item_id in in_progress_ids:
-            logger.debug(f"Skipping in-progress book: {book['title']}")
             continue
             
-        if (book['title'], book['author']) in finished_keys:
+        if (book['title'], book['author']) in cleaned_finished_keys:
             continue
         
         if book['series']:
@@ -80,42 +171,25 @@ def get_recommendations(use_llm: bool = True, user_id: str = None) -> List[Dict[
     
     # Process series to find the next unread book
     for series_name, books in series_candidates.items():
-        # Try to parse sequences
         valid_books = []
         for b in books:
             seq = b.get('series_sequence')
             if seq is not None:
                 try:
-                    # Handle cases like "1", "1.0", "0.5"
                     val = float(seq)
                     valid_books.append((val, b))
                 except ValueError:
                     pass
         
         if valid_books:
-            # Sort by sequence
             valid_books.sort(key=lambda x: x[0])
-            # Add only the first one (lowest sequence number)
             standalone_candidates.append(valid_books[0][1])
         elif books:
             standalone_candidates.append(books[0])
 
-    # Assign indices
-    for book in standalone_candidates:
-        book['_index'] = current_index
-        unread_books.append(book)
-        current_index += 1
-    
-    # --- RAG INTEGRATION ---
-    from recommend_lib.rag import get_rag_system
-    from collections import Counter
-    
-    # Initialize RAG (Persistence ensures we don't re-index everything constantly, but we check for updates)
-    rag = get_rag_system()
-    rag.index_library(items_map)
+    unread_books_candidates = standalone_candidates
     
     # --- USER PREFERENCE WEIGHTING ---
-    # Calculate preferred genres and authors from finished books
     genre_counts = Counter()
     author_counts = Counter()
     
@@ -124,112 +198,54 @@ def get_recommendations(use_llm: bool = True, user_id: str = None) -> List[Dict[
             genre_counts[genre] += 1
         author_counts[book.get('author', '')] += 1
     
-    # Get top preferences (genres and authors that appear most in finished books)
     top_genres = set(g for g, _ in genre_counts.most_common(5))
     top_authors = set(a for a, _ in author_counts.most_common(5))
     
     logger.info(f"User preferences - Top genres: {top_genres}, Top authors: {top_authors}")
     
-    # --- INCREASED RAG CANDIDATES WITH WEIGHTED SCORING ---
-    # Track how many times each candidate is matched by different seed books
-    candidate_match_counts = Counter()
+    # --- RANKING ---
+    ranked_candidates = rank_candidates(unread_books_candidates, finished_books_list, top_genres, top_authors)
     
-    seeds = finished_books_list
+    # Filter out candidates with 0 score if we have plenty of candidates? 
+    # Or just keep best.
+    # We'll take top 50 for consideration in both paths
+    top_candidates = ranked_candidates[:50]
     
-    logger.info(f"Using {len(seeds)} seed books for RAG retrieval.")
-    
-    for seed in seeds:
-        # Construct query from seed book (enhanced with genres)
-        seed_genres = ', '.join(seed.get('genres', []))
-        query = f"{seed['title']} by {seed['author']}. {seed_genres}. {seed.get('description', '')}"
-        # Increased from 5 to 10 results per seed
-        similar_ids = rag.retrieve_similar(query, n_results=10)
-        for sid in similar_ids:
-            candidate_match_counts[sid] += 1
-    
-    # Sort candidates by match count (more matches = more relevant)
-    sorted_candidates = sorted(candidate_match_counts.items(), key=lambda x: -x[1])
-    
-    rag_unread_books = []
-    other_unread_books = []
-    
-    # Build a set for O(1) lookup
-    rag_candidates_ids = set(candidate_match_counts.keys())
-    
-    for book in unread_books:
-        if book['id'] in rag_candidates_ids:
-            # Add match count and preference score to book for sorting
-            match_count = candidate_match_counts[book['id']]
-            
-            # Calculate preference bonus
-            pref_score = 0
-            for genre in book.get('genres', []):
-                if genre in top_genres:
-                    pref_score += 2
-            if book.get('author', '') in top_authors:
-                pref_score += 3
-            
-            book['_rag_score'] = match_count + pref_score
-            rag_unread_books.append(book)
-        else:
-            # Still give preference bonus to non-RAG books
-            pref_score = 0
-            for genre in book.get('genres', []):
-                if genre in top_genres:
-                    pref_score += 2
-            if book.get('author', '') in top_authors:
-                pref_score += 3
-            book['_rag_score'] = pref_score
-            other_unread_books.append(book)
-    
-    # Sort RAG books by score (higher = better match)
-    rag_unread_books.sort(key=lambda x: -x.get('_rag_score', 0))
-    other_unread_books.sort(key=lambda x: -x.get('_rag_score', 0))
-            
-    logger.info(f"RAG found {len(rag_unread_books)} relevant unread books.")
-    
-    # Strategy: Combine them, putting RAG matches first. Limit total context size.
-    # We want to give the LLM mostly RAG matches if available.
-    
-    final_context_books = rag_unread_books + other_unread_books
-    # Limit to e.g. 50 books to fit in context? 
-    # Or just pass them all sorted.
-    # Let's keep existing logic but re-order.
-    
-    unread_str = ""
-    for book in final_context_books:
-        # We need to preserve the _index mapping!
-        # The _index is the index in unread_books list passed to prompt?
-        # No, the prompt uses IDs:0, ID:1 etc.
-        # The LLM returns the ID.
-        # So we must be careful. 
-        # The current implementation uses `unread_books` list index as ID.
-        # So if we reorder `final_context_books`, we need to update the prompt text 
-        # BUT the verification logic `original_book = unread_books[rec_index]` uses `unread_books`.
-        # So we should probably NOT reorder `unread_books` list itself, OR we must re-create it.
-        pass
+    if not top_candidates:
+        logger.info("No valid candidates found.")
+        return []
 
-    # Better approach: 
-    # Create a NEW list for the prompt `prompt_books`.
-    # Update the prompt generation to use `prompt_books`.
-    # AND when parsing response, use `prompt_books`.
-    
-    # Limit RAG results to 50 to conserve context
-    prompt_books = rag_unread_books[:50]
-    
-    # If we have very few RAG results, fill with others to ensure at least 20 candidates
-    if len(prompt_books) < 20: # arbitrary minimum
-        needed = 20 - len(prompt_books)
-        prompt_books.extend(other_unread_books[:needed])
-        
-    # Re-assign indices for the PROMPT only
-    # We can't easily change the book dicts in place without affecting other things potentially?
-    # Actually, we can just build the string and a lookup map.
+    # --- NO LLM PATH ---
+    if not use_llm:
+        logger.info("Generating RAG-only recommendations (use_llm=False)")
+        final_recommendations = []
+        # Return top 20
+        for book in top_candidates[:20]:
+            # Generate static reason
+            reasons = book.get('_match_reasons', [])
+            score = book.get('_rag_score', 0)
+            
+            if reasons:
+                reason_text = f"Recommended based on your history causing a high match score. Similar to: {', '.join(reasons)}"
+            else:
+                reason_text = f"Recommended based on genre/author preferences. Score: {score}"
+                
+            final_recommendations.append({
+                'id': book['id'],
+                'title': book['title'],
+                'author': book['author'],
+                'reason': reason_text,
+                'cover': book['cover']
+            })
+        return final_recommendations
+
+    # --- LLM PATH ---
+    # Prepare prompt with top candidates
     
     unread_str = ""
     prompt_book_map = {} # int id -> book
     
-    for idx, book in enumerate(prompt_books):
+    for idx, book in enumerate(top_candidates):
         prompt_book_map[idx] = book
         
         series_info = ""
@@ -240,45 +256,37 @@ def get_recommendations(use_llm: bool = True, user_id: str = None) -> List[Dict[
             else:
                 series_info = f" (Series: {book['series']})"
         
-        # Add description, truncated to ~250 tokens (1000 chars)
         description = book.get('description', '')
         if description:
-            # Escape braces for format string safety
             description = description.replace('{', '{{').replace('}', '}}')
             if len(description) > 250:
                 description = description[:250] + "..."
             
+            # Include RAG hint in prompt to help LLM? Maybe not needed if they are already filtered.
             entry = f"ID:{idx} | {book['title']} by {book['author']}{series_info}\nDescription: {description}"
         else:
             entry = f"ID:{idx} | {book['title']} by {book['author']}{series_info}"
         
         unread_str += f"{entry}\n"
 
-
-    
     finished_str = ""
     for book in finished_books_list:
         finished_str += f"- {book['title']} by {book['author']}\n"
     
     Language_setting = os.getenv('LANGUAGE', 'de').lower()
-
     prompt_string = _load_language_file(Language_setting, 'user')
-
     prompt = prompt_string.format(finished_str=finished_str, unread_str=unread_str)
 
-    logger.info(f"Prompt: {prompt}")
-
+    logger.info(f"Prompt prepared with {len(top_candidates)} candidates.")
+    
+    # Save debug prompt
     with open('prompt_debug.txt', 'w', encoding='utf-8') as f:
         f.write(prompt)
 
-    if not use_llm:
-        logger.warning("LLM generation is not enabled (use_llm=False)")
-        return []
-    
     recs = generate_book_recommendations(prompt, language=Language_setting)
 
     if not recs:
-        logger.error("No recommendations generated")
+        logger.error("No recommendations generated from LLM")
         return []
 
     try:
@@ -297,13 +305,13 @@ def get_recommendations(use_llm: bool = True, user_id: str = None) -> List[Dict[
             original_book = prompt_book_map[rec_index]
             
             final_recommendations.append({
-                'id': original_book['id'], # The REAL ABS ID
+                'id': original_book['id'],
                 'title': original_book['title'],
                 'author': original_book['author'],
                 'reason': rec.get('reason'),
                 'cover': original_book['cover']
             })
         else:
-            logger.warning(f"Invalid index returned by LLM: {rec_index}")
+            logger.warning(f"Invalid index between returned by LLM: {rec_index}")
                 
     return final_recommendations
