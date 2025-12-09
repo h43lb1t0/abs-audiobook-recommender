@@ -104,6 +104,10 @@ def get_all_items() -> Tuple[dict, dict]:
             if series_name:
                 series_counts[series_name] = series_counts.get(series_name, 0) + 1
 
+            description = metadata.get('description', '')
+            if description:
+                description = re.sub(r'<[^>]+>', '', description)
+
             items_map[item['id']] = {
                 'id': item['id'],
                 'title': metadata.get('title', item.get('name')),
@@ -112,8 +116,10 @@ def get_all_items() -> Tuple[dict, dict]:
                 'series_sequence': series_sequence,
                 'genres': metadata.get('genres', []),
                 'cover': item.get('media', {}).get('coverPath'),
+                'description': description, # Fetch description
                 'lib_name': lib['name'] # Useful for debugging or filtering
             }
+            logger.debug(f"Added item {item['id']} to items_map with description: {items_map[item['id']]['description']}")
 
             if not items_map[item['id']]['author'] or items_map[item['id']]['author'] == 'Unknown':
                 authors = metadata.get('authors', [])

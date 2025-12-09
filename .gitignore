@@ -14,6 +14,7 @@ wheels/
 
 # Instance directory
 Instance
+rag_db_v2
 
 # Debug files
 prompt_debug.txt

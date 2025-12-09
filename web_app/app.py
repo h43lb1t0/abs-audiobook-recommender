@@ -7,6 +7,8 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from recommend_lib.recommender import get_recommendations
+from recommend_lib.rag import init_rag_system
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -181,4 +183,6 @@ def proxy_cover(item_id):
 
 if __name__ == '__main__':
     init_db()
+    init_rag_system()
     app.run(debug=True)
+
