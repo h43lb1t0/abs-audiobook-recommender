@@ -153,7 +153,7 @@ def recommend():
     Returns the recommendations
     """
     try:
-        recs = get_recommendations(True, user_id=current_user.id)
+        recs = get_recommendations(user_id=current_user.id)
         return jsonify(recs)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
