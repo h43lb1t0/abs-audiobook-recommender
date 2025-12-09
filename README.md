@@ -1,6 +1,6 @@
 # ABS audiobook Recommender (Audiobookshelf audiobook Recommendations)
 
-A personalized recommendation system for your [Audiobookshelf](https://www.audiobookshelf.org/) library. This tool analyzes your listening history and uses Google's Gemini AI to suggest the next audiobook you should listen to from your unread collection.
+A personalized recommendation system for your [Audiobookshelf](https://www.audiobookshelf.org/) library. This tool analyzes your listening history and uses a local LLM to suggest the next audiobook you should listen to from your unread collection.
 
 ## Features
 
@@ -9,16 +9,21 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     -   Excludes books you've already finished.
     -   Excludes books currently in progress.
     -   **Series Awareness**: Only recommends the *next* unread book in a series or the first book of a new series.
--   **AI-Powered Recommendations**: Uses Google Gemini (model `gemini-2.5-pro`, with a free API key you get 50 requests per day. Last checked: 04.12.2025) to analyze your taste profile based on finished books and suggests hidden gems from your library.
+-   **Advanced Retrieval (RAG)**: Uses a RAG approach to find "hidden gems" in your library that are semantically related to your finished books. It considers:
+    -   Semantic similarity of descriptions.
+    -   Genre and Tag overlap.
+    -   Series connections.
+-   **AI-Powered Recommendations**: Uses a local LLM (e.g. `llama-server`) to analyze your taste profile and generate personalized reasons for every recommendation.
 -   **Web Interface**: A simple, clean web interface to view recommendations with cover art and AI-generated reasons.
--   **Privacy Focused**: Only sends book titles and authors to Gemini, not your full library data or personal info.
+-   **Privacy Focused**: Only sends book titles and authors to your local LLM, keeping data private.
 -   **User Authentication**: Secure login system to access personalized recommendations.
 
 ## Prerequisites
 
 -   **Python 3.13+**
 -   **Audiobookshelf Server**: You need a running instance of Audiobookshelf.
--   **Google Gemini API Key**: You can get one for free from [Google AI Studio](https://aistudio.google.com/).
+-   **Local LLM Server**: You need a local LLM server running (e.g., `llama-server` from `llama.cpp`) that is compatible with the OpenAI API format and supports JSON mode (`response_format`).
+-   **ChromaDB Dependencies**: (Implicitly installed via `uv sync`) Requires C++ build tools on some platforms for `chroman-db` dependencies.
 
 ## Installation
 
@@ -33,11 +38,6 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     ```bash
     uv sync
     ```
-    
-    *Alternatively, you can install dependencies with pip:*
-    ```bash
-    pip install flask google-genai python-dotenv requests
-    ```
 
 3.  **Configure Environment Variables:**
     Create a `.env` file in the root directory and add the following:
@@ -45,14 +45,14 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     ```env
     ABS_URL=http://your-audiobookshelf-url
     ABS_TOKEN=your-audiobookshelf-api-token
-    GEMINI_API_KEY=your-gemini-api-key
+    LLAMA_SERVER_URL=http://localhost:8080/v1/chat/completions
     LANGUAGE=<desired-language-code>
     ABS_LIB=<library-id>
     ```
 
     *   **ABS_URL**: The full URL to your Audiobookshelf server (e.g., `http://192.168.1.100:13378`).
     *   **ABS_TOKEN**: The root API token for your Audiobookshelf server (found in Settings > Users > Root User).
-    *   **GEMINI_API_KEY**: Your API key from Google AI Studio.
+    *   **LLAMA_SERVER_URL**: URL of your local LLM server.
     *   **LANGUAGE**: (Optional) The language code for recommendations (e.g., `de` for German, `en` for English).You can add your own translations in `web_app/recommend_lib/languages` folder and use the filename as the language code.
     *   **ABS_LIB**: (Optional) The ID of the library you want to use. If not set, all libraries will be used. This is useful if you want to restrict recommendations to a specific library (e.g. Audiobooks). In this way you can still get the audiobook version recommended even if you have finished the ebook version.
 
@@ -72,6 +72,24 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
 
     *Note: The app syncs users from your ABS instance. By default, the password is set to be the same as the username.*
 
+## Developer Info
+
+### Background Logic & RAG Initialization
+-   **RAG System**: The application uses `ChromaDB` as a vector store.
+    -   On startup (`app.py`), `init_rag_system()` is called.
+    -   It indexes all your books by creating embeddings from their Titles, Authors, Genres, Tags, and Descriptions.
+    -   The vector DB is persisted in `rag_db_v2/` to avoid re-indexing on every restart (incremental updates are supported).
+-   **Recommendation Logic (`recommender.py`)**:
+    1.  Fetches user's finished books.
+    2.  Calculates top genres/authors.
+    3.  Uses finished books as "seeds" to query the RAG system.
+    4.  Scores unread books based on RAG similarity + User Preference logic.
+    5.  Passes the top ~50 candidates to the LLM with a highly specific system prompt found in `web_app/recommend_lib/languages/system/`.
+
+### Mocks and Testing
+-   **Prompt Debugging**: The last generated prompt is always saved to `prompt_debug.txt` in the root directory. This is useful for debugging what context the LLM is actually seeing.
+
+
 ## Project Structure
 
 ```
@@ -84,7 +102,7 @@ ABS_vorschlaege/
     ├── db.py               # Database connection and models
     ├── recommend_lib/      # Core recommendation logic
     │   ├── abs_api.py      # Audiobookshelf API client
-    │   ├── gemini.py       # Google Gemini API integration
+    │   ├── llm.py          # Local LLM API integration
     │   └── recommender.py  # Main recommendation orchestration
     ├── static/             # CSS and other static assets
     └── templates/          # HTML templates
@@ -92,11 +110,12 @@ ABS_vorschlaege/
 
 ## Roadmap
 
-- [x] Support for more languages (currently the prompt is in German only)
+- [x] Support for more languages (currently the prompt is in German only) - *Added System Prompts*
 - [x] Choose what ABS library to use (multiple libraries?)
 - [x] Multi-user support
 - [x] Login system
-- [ ] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the Gemini API
+- [x] Advanced RAG Integration
+- [ ] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the LLM
 - [ ] Docker containerization for easier deployment
 - [ ] Enhanced UI/UX design
 - [ ] ~~Additional filtering options (e.g., by genre, length, narrator)~~

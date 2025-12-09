@@ -5,23 +5,24 @@ import json
 import os
 
 from recommend_lib.abs_api import get_all_items, get_finished_books
-from recommend_lib.gemini import generate_book_recommendations
+from recommend_lib.llm import generate_book_recommendations
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def _load_language_file(language: str) -> str:
+def _load_language_file(language: str, type: str) -> str:
     """
     Loads the language file
 
     Args:
         language (str): The language code
+        type (str): User or system
 
     Returns:
         str: The content of the language file
     """
     languages_dir = os.path.join(os.path.dirname(__file__), 'languages')
-    language_file = os.path.join(languages_dir, f"{language}.txt")
+    language_file = os.path.join(languages_dir, f"{type}/{language}.txt")
     if not os.path.exists(language_file):
         raise ValueError(f"Language file not found: {language_file}")
     
@@ -30,7 +31,7 @@ def _load_language_file(language: str) -> str:
     
     return content
 
-def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Dict[str, str]]:
+def get_recommendations(use_llm: bool = True, user_id: str = None) -> List[Dict[str, str]]:
     """
     Returns the recommendations
 
@@ -105,12 +106,132 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Di
         unread_books.append(book)
         current_index += 1
     
-    finished_str = ""
+    # --- RAG INTEGRATION ---
+    from recommend_lib.rag import get_rag_system
+    from collections import Counter
+    
+    # Initialize RAG (Persistence ensures we don't re-index everything constantly, but we check for updates)
+    rag = get_rag_system()
+    rag.index_library(items_map)
+    
+    # --- USER PREFERENCE WEIGHTING ---
+    # Calculate preferred genres and authors from finished books
+    genre_counts = Counter()
+    author_counts = Counter()
+    
     for book in finished_books_list:
-        finished_str += f"- {book['title']} by {book['author']}\n"
-            
-    unread_str = ""
+        for genre in book.get('genres', []):
+            genre_counts[genre] += 1
+        author_counts[book.get('author', '')] += 1
+    
+    # Get top preferences (genres and authors that appear most in finished books)
+    top_genres = set(g for g, _ in genre_counts.most_common(5))
+    top_authors = set(a for a, _ in author_counts.most_common(5))
+    
+    logger.info(f"User preferences - Top genres: {top_genres}, Top authors: {top_authors}")
+    
+    # --- INCREASED RAG CANDIDATES WITH WEIGHTED SCORING ---
+    # Track how many times each candidate is matched by different seed books
+    candidate_match_counts = Counter()
+    
+    seeds = finished_books_list
+    
+    logger.info(f"Using {len(seeds)} seed books for RAG retrieval.")
+    
+    for seed in seeds:
+        # Construct query from seed book (enhanced with genres)
+        seed_genres = ', '.join(seed.get('genres', []))
+        query = f"{seed['title']} by {seed['author']}. {seed_genres}. {seed.get('description', '')}"
+        # Increased from 5 to 10 results per seed
+        similar_ids = rag.retrieve_similar(query, n_results=10)
+        for sid in similar_ids:
+            candidate_match_counts[sid] += 1
+    
+    # Sort candidates by match count (more matches = more relevant)
+    sorted_candidates = sorted(candidate_match_counts.items(), key=lambda x: -x[1])
+    
+    rag_unread_books = []
+    other_unread_books = []
+    
+    # Build a set for O(1) lookup
+    rag_candidates_ids = set(candidate_match_counts.keys())
+    
     for book in unread_books:
+        if book['id'] in rag_candidates_ids:
+            # Add match count and preference score to book for sorting
+            match_count = candidate_match_counts[book['id']]
+            
+            # Calculate preference bonus
+            pref_score = 0
+            for genre in book.get('genres', []):
+                if genre in top_genres:
+                    pref_score += 2
+            if book.get('author', '') in top_authors:
+                pref_score += 3
+            
+            book['_rag_score'] = match_count + pref_score
+            rag_unread_books.append(book)
+        else:
+            # Still give preference bonus to non-RAG books
+            pref_score = 0
+            for genre in book.get('genres', []):
+                if genre in top_genres:
+                    pref_score += 2
+            if book.get('author', '') in top_authors:
+                pref_score += 3
+            book['_rag_score'] = pref_score
+            other_unread_books.append(book)
+    
+    # Sort RAG books by score (higher = better match)
+    rag_unread_books.sort(key=lambda x: -x.get('_rag_score', 0))
+    other_unread_books.sort(key=lambda x: -x.get('_rag_score', 0))
+            
+    logger.info(f"RAG found {len(rag_unread_books)} relevant unread books.")
+    
+    # Strategy: Combine them, putting RAG matches first. Limit total context size.
+    # We want to give the LLM mostly RAG matches if available.
+    
+    final_context_books = rag_unread_books + other_unread_books
+    # Limit to e.g. 50 books to fit in context? 
+    # Or just pass them all sorted.
+    # Let's keep existing logic but re-order.
+    
+    unread_str = ""
+    for book in final_context_books:
+        # We need to preserve the _index mapping!
+        # The _index is the index in unread_books list passed to prompt?
+        # No, the prompt uses IDs:0, ID:1 etc.
+        # The LLM returns the ID.
+        # So we must be careful. 
+        # The current implementation uses `unread_books` list index as ID.
+        # So if we reorder `final_context_books`, we need to update the prompt text 
+        # BUT the verification logic `original_book = unread_books[rec_index]` uses `unread_books`.
+        # So we should probably NOT reorder `unread_books` list itself, OR we must re-create it.
+        pass
+
+    # Better approach: 
+    # Create a NEW list for the prompt `prompt_books`.
+    # Update the prompt generation to use `prompt_books`.
+    # AND when parsing response, use `prompt_books`.
+    
+    # Limit RAG results to 50 to conserve context
+    prompt_books = rag_unread_books[:50]
+    
+    # If we have very few RAG results, fill with others to ensure at least 20 candidates
+    if len(prompt_books) < 20: # arbitrary minimum
+        needed = 20 - len(prompt_books)
+        prompt_books.extend(other_unread_books[:needed])
+        
+    # Re-assign indices for the PROMPT only
+    # We can't easily change the book dicts in place without affecting other things potentially?
+    # Actually, we can just build the string and a lookup map.
+    
+    unread_str = ""
+    prompt_book_map = {} # int id -> book
+    
+    for idx, book in enumerate(prompt_books):
+        prompt_book_map[idx] = book
+        
         series_info = ""
         if book['series']:
             seq = book.get('series_sequence')
@@ -118,24 +239,43 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Di
                 series_info = f" (Series: {book['series']} #{seq})"
             else:
                 series_info = f" (Series: {book['series']})"
-        entry = f"ID:{book['_index']} | {book['title']} by {book['author']}{series_info}"
+        
+        # Add description, truncated to ~250 tokens (1000 chars)
+        description = book.get('description', '')
+        if description:
+            # Escape braces for format string safety
+            description = description.replace('{', '{{').replace('}', '}}')
+            if len(description) > 250:
+                description = description[:250] + "..."
+            
+            entry = f"ID:{idx} | {book['title']} by {book['author']}{series_info}\nDescription: {description}"
+        else:
+            entry = f"ID:{idx} | {book['title']} by {book['author']}{series_info}"
+        
         unread_str += f"{entry}\n"
 
 
     
+    finished_str = ""
+    for book in finished_books_list:
+        finished_str += f"- {book['title']} by {book['author']}\n"
+    
     Language_setting = os.getenv('LANGUAGE', 'de').lower()
 
-    prompt_string = _load_language_file(Language_setting)
+    prompt_string = _load_language_file(Language_setting, 'user')
 
     prompt = prompt_string.format(finished_str=finished_str, unread_str=unread_str)
 
     logger.info(f"Prompt: {prompt}")
 
-    if not use_gemini:
-        logger.warning("Gemini is not enabled, skipping recommendation generation")
+    with open('prompt_debug.txt', 'w', encoding='utf-8') as f:
+        f.write(prompt)
+
+    if not use_llm:
+        logger.warning("LLM generation is not enabled (use_llm=False)")
         return []
     
-    recs = generate_book_recommendations(prompt)
+    recs = generate_book_recommendations(prompt, language=Language_setting)
 
     if not recs:
         logger.error("No recommendations generated")
@@ -145,7 +285,7 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Di
         parsed_recs = json.loads(recs.text)
         recommendations_raw = parsed_recs.get('items', [])
     except Exception as e:
-        logger.error(f"Error parsing Gemini response: {e}")
+        logger.error(f"Error parsing LLM response: {e}")
         return []
     
     final_recommendations = []
@@ -153,8 +293,8 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Di
     for rec in recommendations_raw:
         rec_index = rec.get('id')
         
-        if isinstance(rec_index, int) and 0 <= rec_index < len(unread_books):
-            original_book = unread_books[rec_index]
+        if isinstance(rec_index, int) and rec_index in prompt_book_map:
+            original_book = prompt_book_map[rec_index]
             
             final_recommendations.append({
                 'id': original_book['id'], # The REAL ABS ID
@@ -164,6 +304,6 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Di
                 'cover': original_book['cover']
             })
         else:
-            logger.warning(f"Invalid index returned by Gemini: {rec_index}")
+            logger.warning(f"Invalid index returned by LLM: {rec_index}")
                 
     return final_recommendations
