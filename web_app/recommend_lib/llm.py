@@ -7,12 +7,13 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-def generate_book_recommendations(prompt: str) -> dict:
+def generate_book_recommendations(prompt: str, language: str = 'en') -> dict:
     """
     Generates book recommendations using a local llama-server.
 
     Args:
         prompt (str): The prompt to send to the LLM.
+        language (str): The language code for the system prompt (default: 'en').
 
     Returns:
         dict: A dictionary mimicking the standard LLM response object (has a .text attribute),
@@ -32,11 +33,28 @@ def generate_book_recommendations(prompt: str) -> dict:
         def __init__(self, text):
             self.text = text
 
+    # Determine the directory of the current script
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    system_prompt_path = os.path.join(current_dir, 'languages', 'system', f'{language}.txt')
+    
+    try:
+        with open(system_prompt_path, 'r', encoding='utf-8') as f:
+            system_instruction = f.read()
+    except Exception as e:
+        logger.error(f"Failed to load system prompt from {system_prompt_path}: {e}")
+        # Fallback to English if specific language fails
+        fallback_path = os.path.join(current_dir, 'languages', 'system', 'en.txt')
+        try:
+             with open(fallback_path, 'r', encoding='utf-8') as f:
+                system_instruction = f.read()
+        except:
+             system_instruction = "You are a helpful librarian. You must output ONLY JSON."
+
     payload = {
         "messages": [
             {
                 "role": "system",
-                "content": "You are a helpful librarian. You must output ONLY JSON."
+                "content": system_instruction
             },
             {
                 "role": "user",
@@ -49,6 +67,7 @@ def generate_book_recommendations(prompt: str) -> dict:
             "schema": {
                 "type": "object",
                 "properties": {
+                    "thinking": {"type": "string"},
                     "items": {
                         "type": "array",
                         "items": {
@@ -63,7 +82,7 @@ def generate_book_recommendations(prompt: str) -> dict:
                         }
                     }
                 },
-                "required": ["items"]
+                "required": ["thinking", "items"]
             }
         }
     }

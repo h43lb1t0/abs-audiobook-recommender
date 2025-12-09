@@ -10,18 +10,19 @@ from recommend_lib.llm import generate_book_recommendations
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def _load_language_file(language: str) -> str:
+def _load_language_file(language: str, type: str) -> str:
     """
     Loads the language file
 
     Args:
         language (str): The language code
+        type (str): User or system
 
     Returns:
         str: The content of the language file
     """
     languages_dir = os.path.join(os.path.dirname(__file__), 'languages')
-    language_file = os.path.join(languages_dir, f"{language}.txt")
+    language_file = os.path.join(languages_dir, f"{type}/{language}.txt")
     if not os.path.exists(language_file):
         raise ValueError(f"Language file not found: {language_file}")
     
@@ -261,7 +262,7 @@ def get_recommendations(use_llm: bool = True, user_id: str = None) -> List[Dict[
     
     Language_setting = os.getenv('LANGUAGE', 'de').lower()
 
-    prompt_string = _load_language_file(Language_setting)
+    prompt_string = _load_language_file(Language_setting, 'user')
 
     prompt = prompt_string.format(finished_str=finished_str, unread_str=unread_str)
 
@@ -274,7 +275,7 @@ def get_recommendations(use_llm: bool = True, user_id: str = None) -> List[Dict[
         logger.warning("LLM generation is not enabled (use_llm=False)")
         return []
     
-    recs = generate_book_recommendations(prompt)
+    recs = generate_book_recommendations(prompt, language=Language_setting)
 
     if not recs:
         logger.error("No recommendations generated")
