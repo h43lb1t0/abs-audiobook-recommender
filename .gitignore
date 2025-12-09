@@ -22,4 +22,9 @@ prompt_debug.txt
 items_map.json
 items_resp.json
 
+# Cache files
+.cache/
+web_app/.cache/
+
+
 

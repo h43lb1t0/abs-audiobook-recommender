@@ -39,10 +39,33 @@ def get_rag_system() -> Optional['RAGSystem']:
     return _RAG_INSTANCE
 
 
-class RAGSystem:
-    def __init__(self, persist_directory: str = "rag_db_v2"):
+class JinaEmbeddingFunction(embedding_functions.EmbeddingFunction):
+    def __init__(self, model_name: str = "jinaai/jina-embeddings-v3", default_task: str = "retrieval.passage"):
         """
-        Initializes the RAG system with ChromaDB and Sentence Transformers.
+        Custom embedding function for Jina v3 using SentenceTransformers.
+        Supports task-specific embeddings via trust_remote_code=True.
+        """
+        from sentence_transformers import SentenceTransformer
+        # logger.info(f"Loading Jina v3 model: {model_name}")
+        # Use local cache to avoid Windows global cache permission/path issues
+        cache_folder = os.path.abspath(".cache")
+        self.model = SentenceTransformer(model_name, trust_remote_code=True, cache_folder=cache_folder)
+        self.default_task = default_task
+
+    def __call__(self, input: List[str]) -> List[List[float]]:
+        # This is called by ChromaDB for indexing (default task: passage)
+        return self.model.encode(input, task=self.default_task).tolist()
+
+    def embed_query(self, query: str) -> List[float]:
+        # Specific method for queries (task: query)
+        # Returns a single vector
+        return self.model.encode([query], task="retrieval.query")[0].tolist()
+
+
+class RAGSystem:
+    def __init__(self, persist_directory: str = "rag_db_v2", model_repo="alikia2x/jina-embedding-v3-m2v-1024"):
+        """
+        Initializes the RAG system with ChromaDB and Jina Embeddings v3 ONNX.
         """
         self.persist_directory = persist_directory
         # Ensure directory exists
@@ -52,18 +75,17 @@ class RAGSystem:
         # Initialize ChromaDB client
         self.client = chromadb.PersistentClient(path=self.persist_directory)
 
-        # Use a better multilingual model for embeddings
-        # intfloat/multilingual-e5-base has better semantic understanding
-        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="intfloat/multilingual-e5-base"
+        # Initialize Jina Embeddings v3 ONNX
+        self.embedding_fn = JinaOnnxEmbeddingFunction(
+            model_repo=model_repo
         )
 
-        # Get or create collection (v2 for new model/content)
+        # Get or create collection (v3_onnx)
         self.collection = self.client.get_or_create_collection(
-            name="audiobooks_v2",
+            name="audiobooks_v3_onnx",
             embedding_function=self.embedding_fn
         )
-        logger.info(f"RAG System initialized. Database path: {self.persist_directory}")
+        logger.info(f"RAG System initialized with ONNX model. Database path: {self.persist_directory}")
 
     def index_library(self, items_map: Dict[str, Dict]):
         """
@@ -92,7 +114,7 @@ class RAGSystem:
             series = item.get('series', '')
             description = item.get('description', '')
             
-            # Construct rich embedding text: Title + Author + Genres + Series + Description
+            # Construct rich embedding text
             parts = [f"{item['title']} by {item['author']}"]
             if genres_str:
                 parts.append(f"Genres: {genres_str}")
@@ -118,7 +140,7 @@ class RAGSystem:
 
         if ids:
             logger.info(f"Indexing {len(ids)} new items...")
-            # Add in batches to avoid hitting limits if any
+            # Add in batches
             batch_size = 100
             for i in range(0, len(ids), batch_size):
                 end = min(i + batch_size, len(ids))
@@ -132,56 +154,152 @@ class RAGSystem:
             logger.info("No new items to index.")
 
     def retrieve_similar(self, query_text: str, n_results: int = 5) -> List[str]:
-        """
-        Retrieves similar items based on the query text.
-        Returns a list of item IDs.
-        """
-        if self.collection.count() == 0:
-            return []
-
+        # Embed query manually
+        query_vec = self.embedding_fn.embed_query(query_text)
         results = self.collection.query(
-            query_texts=[query_text],
+            query_embeddings=[query_vec],
             n_results=n_results
         )
-        
-        # results['ids'] is a list of lists (one per query)
         if results and results['ids']:
             return results['ids'][0]
         return []
 
     def get_embeddings(self, ids: List[str]) -> List[List[float]]:
-        """
-        Retrieves embeddings for a list of item IDs.
-        """
-        if not ids:
-            return []
-            
-        results = self.collection.get(
-            ids=ids,
-            include=['embeddings']
-        )
-        
-        # Depending on chromadb version, embeddings might be None if not found.
+        if not ids: return []
+        results = self.collection.get(ids=ids, include=['embeddings'])
         embeddings = results.get('embeddings')
         if embeddings is not None and len(embeddings) > 0:
-            # Ensure it is a list of lists, not numpy array
-            if hasattr(embeddings, 'tolist'):
-                 return embeddings.tolist()
+            if hasattr(embeddings, 'tolist'): return embeddings.tolist()
             return embeddings
         return []
 
     def retrieve_by_embedding(self, query_embedding: List[float], n_results: int = 50) -> List[str]:
-        """
-        Retrieves similar items based on a query embedding vector.
-        """
-        if self.collection.count() == 0:
-            return []
-
-        results = self.collection.query(
-            query_embeddings=[query_embedding],
-            n_results=n_results
-        )
-        
-        if results and results['ids']:
-            return results['ids'][0]
+        if self.collection.count() == 0: return []
+        results = self.collection.query(query_embeddings=[query_embedding], n_results=n_results)
+        if results and results['ids']: return results['ids'][0]
         return []
+
+class JinaOnnxEmbeddingFunction(embedding_functions.EmbeddingFunction):
+    def __init__(self, model_repo: str):
+        """
+        Custom embedding function for Jina v3 (or compatible) via ONNX Runtime.
+        Requires `onnxruntime` and `tokenizers`.
+        """
+        import onnxruntime as ort
+        from tokenizers import Tokenizer
+        from huggingface_hub import hf_hub_download
+        import numpy as np
+
+        logger.info(f"Initializing Jina ONNX from: {model_repo}")
+
+        # Download Model and Tokenizer
+        # We need model.onnx and tokenizer.json
+        # Check files via: list_repo_files("alikia2x/jina-embedding-v3-m2v-1024")
+        # Found: onnx/model.onnx and onnx/model_INT8.onnx
+        
+        try:
+             logger.info("Attempting to download quantized ONNX model...")
+             model_path = hf_hub_download(repo_id=model_repo, filename="onnx/model_INT8.onnx")
+        except Exception:
+             logger.info("Quantized model not found, falling back to full float32 model...")
+             model_path = hf_hub_download(repo_id=model_repo, filename="onnx/model.onnx")
+             
+        tokenizer_path = hf_hub_download(repo_id=model_repo, filename="tokenizer.json")
+
+        self.tokenizer = Tokenizer.from_file(tokenizer_path)
+        self.tokenizer.enable_padding(pad_id=0, pad_token="[PAD]")
+        self.tokenizer.enable_truncation(max_length=8192) # Jina v3 max length
+
+        self.session = ort.InferenceSession(model_path)
+        self.output_name = self.session.get_outputs()[0].name
+        
+    def __call__(self, input: List[str]) -> List[List[float]]:
+        # Indexing / Passage embedding
+        return self._embed(input)
+
+    def embed_query(self, query: str) -> List[float]:
+        # Query embedding
+        embedding = self._embed([query])
+        if embedding:
+            return embedding[0]
+        return []
+        
+    def _embed(self, texts: List[str]) -> List[List[float]]:
+        import numpy as np
+        
+        # Tokenize
+        # Jina v3 tokenization
+        encoded = self.tokenizer.encode_batch(texts)
+        
+        input_names = [i.name for i in self.session.get_inputs()]
+        
+        # Prepare inputs based on model type
+        if "offsets" in input_names:
+             # Model2Vec / BagOfWords style (concatenated inputs + offsets)
+             flat_ids = []
+             offsets = []
+             current_offset = 0
+             
+             for e in encoded:
+                 offsets.append(current_offset)
+                 # Filter out special tokens (CLS/SEP/PAD) if needed, but tokenizer usually handles it.
+                 # For M2V, usually we keep content tokens.
+                 # Simply extend for now.
+                 ids = e.ids
+                 # Remove padding (0) if present in ids (Model2Vec usually doesn't need padding in flat array)
+                 ids = [i for i in ids if i != 0] 
+                 
+                 flat_ids.extend(ids)
+                 current_offset += len(ids)
+                 
+             input_ids = np.array(flat_ids, dtype=np.int64)
+             offsets = np.array(offsets, dtype=np.int64)
+             
+             ort_inputs = {
+                 "input_ids": input_ids,
+                 "offsets": offsets
+             }
+        else:
+             # Standard BERT style
+            input_ids = np.array([e.ids for e in encoded], dtype=np.int64)
+            attention_mask = np.array([e.attention_mask for e in encoded], dtype=np.int64)
+            
+            ort_inputs = {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask
+            }
+            if "token_type_ids" in input_names:
+                 ort_inputs["token_type_ids"] = np.zeros_like(input_ids)
+        
+        
+        # Debugging model inputs
+        # for i in self.session.get_inputs():
+        #     print(f"Model Input: {i.name}, Type: {i.type}, Shape: {i.shape}")
+
+        try:
+            outputs = self.session.run(None, ort_inputs)
+            # Output is usually [batch_size, hidden_size] for M2V
+            output = outputs[0]
+            
+            # If 3D, do pooling
+            if len(output.shape) == 3:
+                # Perform Mean Pooling with Attention Mask
+                # (Only for BERT style)
+                # ... (existing pooling logic) ...
+                mask_expanded = np.expand_dims(attention_mask, axis=-1)
+                sum_embeddings = np.sum(output * mask_expanded, axis=1)
+                sum_mask = np.clip(np.sum(mask_expanded, axis=1), a_min=1e-9, a_max=None)
+                embeddings = sum_embeddings / sum_mask
+            else:
+                # 2D output (already pooled or M2V)
+                embeddings = output
+                
+            # Normalize
+            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+            embeddings = embeddings / np.clip(norms, a_min=1e-9, a_max=None)
+            
+            return embeddings.tolist()
+            
+        except Exception as e:
+            logger.error(f"ONNX Inference failed for inputs: {list(ort_inputs.keys())}")
+            return []
