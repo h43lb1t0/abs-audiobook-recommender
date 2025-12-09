@@ -339,9 +339,9 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
                     # Boost logic: If book is highly rated for similar user but low for me?
                     # The prompt said: "sort books that have a low rank for me but a higher rank for the other user higher for me"
                     # We are re-sorting, so simply increasing the score achieves this.
-                    # We give a massive boost to ensure they float up.
+                    # We give a moderate boost to ensure they float up but don't dominate completely.
                     
-                    boost_amount = 50 * urgency_score # Significant boost
+                    boost_amount = 15 * urgency_score # Moderate boost (was 50)
                     book['_rag_score'] += boost_amount
                     if '_match_reasons' not in book:
                         book['_match_reasons'] = []
