@@ -5,7 +5,7 @@ import json
 import os
 
 from recommend_lib.abs_api import get_all_items, get_finished_books
-from recommend_lib.gemini import generate_book_recommendations
+from recommend_lib.llm import generate_book_recommendations
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ def _load_language_file(language: str) -> str:
     
     return content
 
-def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Dict[str, str]]:
+def get_recommendations(use_llm: bool = True, user_id: str = None) -> List[Dict[str, str]]:
     """
     Returns the recommendations
 
@@ -131,8 +131,11 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Di
 
     logger.info(f"Prompt: {prompt}")
 
-    if not use_gemini:
-        logger.warning("Gemini is not enabled, skipping recommendation generation")
+    with open('prompt_debug.txt', 'w', encoding='utf-8') as f:
+        f.write(prompt)
+
+    if not use_llm:
+        logger.warning("LLM generation is not enabled (use_llm=False)")
         return []
     
     recs = generate_book_recommendations(prompt)
@@ -145,7 +148,7 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Di
         parsed_recs = json.loads(recs.text)
         recommendations_raw = parsed_recs.get('items', [])
     except Exception as e:
-        logger.error(f"Error parsing Gemini response: {e}")
+        logger.error(f"Error parsing LLM response: {e}")
         return []
     
     final_recommendations = []
@@ -164,6 +167,6 @@ def get_recommendations(use_gemini: bool = True, user_id: str = None) -> List[Di
                 'cover': original_book['cover']
             })
         else:
-            logger.warning(f"Invalid index returned by Gemini: {rec_index}")
+            logger.warning(f"Invalid index returned by LLM: {rec_index}")
                 
     return final_recommendations
