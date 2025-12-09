@@ -213,9 +213,10 @@ def get_recommendations(use_llm: bool = True, user_id: str = None) -> List[Dict[
     # Update the prompt generation to use `prompt_books`.
     # AND when parsing response, use `prompt_books`.
     
-    prompt_books = rag_unread_books
+    # Limit RAG results to 50 to conserve context
+    prompt_books = rag_unread_books[:50]
     
-    # If we have very few RAG results, fill with others
+    # If we have very few RAG results, fill with others to ensure at least 20 candidates
     if len(prompt_books) < 20: # arbitrary minimum
         needed = 20 - len(prompt_books)
         prompt_books.extend(other_unread_books[:needed])
