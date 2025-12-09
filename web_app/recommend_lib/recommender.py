@@ -104,8 +104,11 @@ def rank_candidates(
         
         book['_rag_score'] = total_score
         # For mean pooling, we don't have specific seed book matches easily. 
-        # We can leave this empty or populate with a generic reason later.
-        book['_match_reasons'] = [] 
+        # But we can indicate it matched the profile.
+        if match_score > 0:
+            book['_match_reasons'] = ["Matches your reading profile"]
+        else:
+            book['_match_reasons'] = [] 
         
         ranked_books.append(book)
 
@@ -113,6 +116,107 @@ def rank_candidates(
     ranked_books.sort(key=lambda x: -x.get('_rag_score', 0))
     
     return ranked_books
+
+def calculate_mean_vector(embeddings: List[List[float]]) -> List[float]:
+    """Calculates the mean vector from a list of embeddings."""
+    if not embeddings:
+        return []
+    
+    vector_length = len(embeddings[0])
+    mean_vector = [0.0] * vector_length
+    
+    for emb in embeddings:
+        for i, val in enumerate(emb):
+            mean_vector[i] += val
+            
+    for i in range(vector_length):
+        mean_vector[i] /= len(embeddings)
+        
+    return mean_vector
+
+def cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
+    """Calculates cosine similarity between two vectors."""
+    if not vec_a or not vec_b or len(vec_a) != len(vec_b):
+        return 0.0
+        
+    dot_product = sum(a * b for a, b in zip(vec_a, vec_b))
+    norm_a = sum(a * a for a in vec_a) ** 0.5
+    norm_b = sum(b * b for b in vec_b) ** 0.5
+    
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+        
+    return dot_product / (norm_a * norm_b)
+
+def get_collaborative_recommendations(
+    current_user_mean_vector: List[float], 
+    current_user_id: str, 
+    items_map: Dict,
+    rag_system
+) -> Tuple[List[Dict], str, float]:
+    """
+    Finds the most similar user and returns their top recommendations.
+    Returns: (List of candidate books, Similar User Name, Similarity Score)
+    """
+    from recommend_lib.abs_api import get_abs_users, get_finished_books
+    
+    all_users = get_abs_users()
+    best_similarity = -1.0
+    most_similar_user = None
+    most_similar_mean_vector = None
+    
+    logger.info(f"Checking {len(all_users)} users for collaborative filtering...")
+    
+    for user in all_users:
+        uid = user['id']
+        username = user.get('username', 'Unknown')
+        
+        if uid == current_user_id:
+            continue
+            
+        # Get their finished books
+        finished_ids, _, _ = get_finished_books(items_map, user_id=uid)
+        
+        if not finished_ids:
+            continue
+            
+        # Get embeddings
+        # We need to filter IDs that are actually in our items_map/RAG
+        valid_ids = [fid for fid in finished_ids if fid in items_map]
+        if not valid_ids:
+            continue
+            
+        embeddings = rag_system.get_embeddings(valid_ids)
+        if not embeddings:
+            continue
+            
+        user_mean_vector = calculate_mean_vector(embeddings)
+        
+        sim = cosine_similarity(current_user_mean_vector, user_mean_vector)
+        
+        # logger.debug(f"User {username} similarity: {sim}")
+        
+        if sim > best_similarity:
+            best_similarity = sim
+            most_similar_user = user
+            most_similar_mean_vector = user_mean_vector
+            
+    if most_similar_user and best_similarity > 0.5: # Threshold for "similar enough"
+        logger.info(f"Most similar user found: {most_similar_user.get('username')} with score {best_similarity}")
+        
+        # Get recommendations for this similar user using their mean vector
+        similar_ids = rag_system.retrieve_by_embedding(most_similar_mean_vector, n_results=50)
+        
+        # Convert IDs to book objects
+        collab_candidates = []
+        for sid in similar_ids:
+            if sid in items_map:
+                collab_candidates.append(items_map[sid])
+                
+        return collab_candidates, most_similar_user.get('username'), best_similarity
+        
+    return [], None, 0.0
+
 
 def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict[str, str]]:
     """
@@ -204,7 +308,48 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
     logger.info(f"User preferences - Top genres: {top_genres}, Top authors: {top_authors}")
     
     # --- RANKING ---
+    # --- RANKING ---
     ranked_candidates = rank_candidates(unread_books_candidates, finished_books_list, top_genres, top_authors)
+    
+    # --- COLLABORATIVE FILTERING BONUS ---
+    # Need current user's mean vector - recalculate or extract from rank_candidates?
+    # rank_candidates calculated it internally but didn't return it. 
+    # Let's extract getting the mean vector into a variable if possible, or just recalculate (cheap).
+    
+    current_seed_ids = [book['id'] for book in finished_books_list if book.get('id')]
+    current_embeddings = rag.get_embeddings(current_seed_ids)
+    
+    if current_embeddings:
+        current_mean_vector = calculate_mean_vector(current_embeddings)
+        
+        collab_recs, similar_user, urgency_score = get_collaborative_recommendations(
+            current_mean_vector, 
+            user_id if user_id else "me", # Approximate ID logic
+            items_map,
+            rag
+        )
+        
+        if similar_user and collab_recs:
+            collab_ids = set([c['id'] for c in collab_recs])
+            logger.info(f"Boosting {len(collab_ids)} books based on similar user {similar_user}")
+            
+            for book in ranked_candidates:
+                if book['id'] in collab_ids:
+                    # Apply Boost
+                    # Boost logic: If book is highly rated for similar user but low for me?
+                    # The prompt said: "sort books that have a low rank for me but a higher rank for the other user higher for me"
+                    # We are re-sorting, so simply increasing the score achieves this.
+                    # We give a massive boost to ensure they float up.
+                    
+                    boost_amount = 50 * urgency_score # Significant boost
+                    book['_rag_score'] += boost_amount
+                    if '_match_reasons' not in book:
+                        book['_match_reasons'] = []
+                    book['_match_reasons'].append(f"Highly relevant to similar user '{similar_user}'")
+
+            # Re-sort after boosting
+            ranked_candidates.sort(key=lambda x: -x.get('_rag_score', 0))
+
     
     # Filter out candidates with 0 score if we have plenty of candidates? 
     # Or just keep best.
@@ -226,7 +371,10 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
             score = book.get('_rag_score', 0)
             
             if reasons:
-                reason_text = f"Recommended based on your history causing a high match score. Similar to: {', '.join(reasons)}"
+                if reasons == ["Matches your reading profile"]:
+                   reason_text = f"Recommended based on your reading profile. Score: {score}"
+                else:
+                   reason_text = f"Recommended based on your history causing a high match score. Similar to: {', '.join(reasons)}"
             else:
                 reason_text = f"Recommended based on genre/author preferences. Score: {score}"
                 
