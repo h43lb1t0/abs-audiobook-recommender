@@ -16,6 +16,10 @@ wheels/
 Instance
 rag_db_v2
 
+
 # Debug files
 prompt_debug.txt
+items_map.json
+items_resp.json
+
 

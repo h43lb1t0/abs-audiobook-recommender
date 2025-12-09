@@ -81,6 +81,9 @@ def get_all_items() -> Tuple[dict, dict]:
         items_resp = requests.get(items_url, headers=HEADERS)
         items_resp.raise_for_status()
 
+        with open('items_resp.json', 'w', encoding='utf-8') as f:
+            json.dump(items_resp.json(), f, ensure_ascii=False, indent=4)
+
         for item in items_resp.json().get('results', []):
             metadata = item.get('media', {}).get('metadata', {})
 
@@ -115,10 +118,13 @@ def get_all_items() -> Tuple[dict, dict]:
                 'series': series_name,
                 'series_sequence': series_sequence,
                 'genres': metadata.get('genres', []),
+                'tags': item.get('media', {}).get('tags', []),
                 'cover': item.get('media', {}).get('coverPath'),
                 'description': description, # Fetch description
                 'lib_name': lib['name'] # Useful for debugging or filtering
             }
+            with open('items_map.json', 'w', encoding='utf-8') as f:
+                json.dump(items_map, f, ensure_ascii=False, indent=4)
             logger.debug(f"Added item {item['id']} to items_map with description: {items_map[item['id']]['description']}")
 
             if not items_map[item['id']]['author'] or items_map[item['id']]['author'] == 'Unknown':

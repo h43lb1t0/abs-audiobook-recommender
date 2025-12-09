@@ -107,32 +107,83 @@ def get_recommendations(use_llm: bool = True, user_id: str = None) -> List[Dict[
     
     # --- RAG INTEGRATION ---
     from recommend_lib.rag import get_rag_system
+    from collections import Counter
     
     # Initialize RAG (Persistence ensures we don't re-index everything constantly, but we check for updates)
     rag = get_rag_system()
     rag.index_library(items_map)
     
-    rag_candidates_ids = set()
+    # --- USER PREFERENCE WEIGHTING ---
+    # Calculate preferred genres and authors from finished books
+    genre_counts = Counter()
+    author_counts = Counter()
+    
+    for book in finished_books_list:
+        for genre in book.get('genres', []):
+            genre_counts[genre] += 1
+        author_counts[book.get('author', '')] += 1
+    
+    # Get top preferences (genres and authors that appear most in finished books)
+    top_genres = set(g for g, _ in genre_counts.most_common(5))
+    top_authors = set(a for a, _ in author_counts.most_common(5))
+    
+    logger.info(f"User preferences - Top genres: {top_genres}, Top authors: {top_authors}")
+    
+    # --- INCREASED RAG CANDIDATES WITH WEIGHTED SCORING ---
+    # Track how many times each candidate is matched by different seed books
+    candidate_match_counts = Counter()
     
     seeds = finished_books_list
     
     logger.info(f"Using {len(seeds)} seed books for RAG retrieval.")
     
     for seed in seeds:
-         # Construct query from seed book
-        query = f"{seed['title']} by {seed['author']}. {seed.get('description', '')}"
-        similar_ids = rag.retrieve_similar(query, n_results=5)
+        # Construct query from seed book (enhanced with genres)
+        seed_genres = ', '.join(seed.get('genres', []))
+        query = f"{seed['title']} by {seed['author']}. {seed_genres}. {seed.get('description', '')}"
+        # Increased from 5 to 10 results per seed
+        similar_ids = rag.retrieve_similar(query, n_results=10)
         for sid in similar_ids:
-            rag_candidates_ids.add(sid)
-                
+            candidate_match_counts[sid] += 1
+    
+    # Sort candidates by match count (more matches = more relevant)
+    sorted_candidates = sorted(candidate_match_counts.items(), key=lambda x: -x[1])
+    
     rag_unread_books = []
     other_unread_books = []
     
+    # Build a set for O(1) lookup
+    rag_candidates_ids = set(candidate_match_counts.keys())
+    
     for book in unread_books:
         if book['id'] in rag_candidates_ids:
+            # Add match count and preference score to book for sorting
+            match_count = candidate_match_counts[book['id']]
+            
+            # Calculate preference bonus
+            pref_score = 0
+            for genre in book.get('genres', []):
+                if genre in top_genres:
+                    pref_score += 2
+            if book.get('author', '') in top_authors:
+                pref_score += 3
+            
+            book['_rag_score'] = match_count + pref_score
             rag_unread_books.append(book)
         else:
+            # Still give preference bonus to non-RAG books
+            pref_score = 0
+            for genre in book.get('genres', []):
+                if genre in top_genres:
+                    pref_score += 2
+            if book.get('author', '') in top_authors:
+                pref_score += 3
+            book['_rag_score'] = pref_score
             other_unread_books.append(book)
+    
+    # Sort RAG books by score (higher = better match)
+    rag_unread_books.sort(key=lambda x: -x.get('_rag_score', 0))
+    other_unread_books.sort(key=lambda x: -x.get('_rag_score', 0))
             
     logger.info(f"RAG found {len(rag_unread_books)} relevant unread books.")
     

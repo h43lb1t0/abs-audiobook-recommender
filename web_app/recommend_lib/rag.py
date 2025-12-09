@@ -52,14 +52,15 @@ class RAGSystem:
         # Initialize ChromaDB client
         self.client = chromadb.PersistentClient(path=self.persist_directory)
 
-        # Use a standardized multilingual model for embeddings
+        # Use a better multilingual model for embeddings
+        # intfloat/multilingual-e5-base has better semantic understanding
         self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+            model_name="intfloat/multilingual-e5-base"
         )
 
-        # Get or create collection
+        # Get or create collection (v2 for new model/content)
         self.collection = self.client.get_or_create_collection(
-            name="audiobooks",
+            name="audiobooks_v2",
             embedding_function=self.embedding_fn
         )
         logger.info(f"RAG System initialized. Database path: {self.persist_directory}")
@@ -83,14 +84,35 @@ class RAGSystem:
             if item_id in existing_ids:
                 continue
 
-            # Construct embedding text: Title + Author + Description
-            text_to_embed = f"{item['title']} by {item['author']}. {item.get('description', '')}"
+            # Build enhanced embedding text with genres and series
+            genres = item.get('genres', [])
+            genres_str = ', '.join(genres) if genres else ''
+            tags = item.get('tags', [])
+            tags_str = ', '.join(tags) if tags else ''
+            series = item.get('series', '')
+            description = item.get('description', '')
+            
+            # Construct rich embedding text: Title + Author + Genres + Series + Description
+            parts = [f"{item['title']} by {item['author']}"]
+            if genres_str:
+                parts.append(f"Genres: {genres_str}")
+            if tags_str:
+                parts.append(f"Tags: {tags_str}")
+            if series:
+                parts.append(f"Series: {series}")
+            if description:
+                parts.append(description)
+            
+            text_to_embed = ". ".join(parts)
             
             ids.append(item_id)
             documents.append(text_to_embed)
             metadatas.append({
                 "title": item['title'],
-                "author": item['author']
+                "author": item['author'],
+                "genres": ','.join(genres) if genres else '',
+                "series": series or '',
+                "tags": ','.join(tags) if tags else ''
             })
             count_new += 1
 
