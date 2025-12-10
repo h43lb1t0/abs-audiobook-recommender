@@ -324,12 +324,3 @@ header p {
     margin-right: 0.25rem;
     vertical-align: middle;
 }
-
-/* Override results container to not use grid when grouping */
-#results {
-    display: block;
-}
-
-#results.grid {
-    display: block;
-}
