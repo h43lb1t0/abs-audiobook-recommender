@@ -1,17 +1,26 @@
 import logging
 import os
+from typing import Dict, List, Optional
+
 import chromadb
+import numpy as np
+import onnxruntime as ort
 from chromadb.utils import embedding_functions
-from typing import List, Dict, Optional
+from huggingface_hub import hf_hub_download
 from recommend_lib.abs_api import get_all_items
+from sentence_transformers import SentenceTransformer
+from tokenizers import Tokenizer
 
 logger = logging.getLogger(__name__)
 
 _RAG_INSTANCE = None
 
-def init_rag_system(persist_directory: str = "rag_db_v2"):
+def init_rag_system(persist_directory: str = "rag_db_v2") -> None:
     """
     Initializes the global RAG system singleton and indexes the library.
+
+    Args:
+        persist_directory (str): Directory to persist the RAG system.
     """
     global _RAG_INSTANCE
     if _RAG_INSTANCE is None:
@@ -31,71 +40,98 @@ def init_rag_system(persist_directory: str = "rag_db_v2"):
 def get_rag_system() -> Optional['RAGSystem']:
     """
     Returns the global RAG system singleton.
+
+    Returns:
+        Optional['RAGSystem']: The global RAG system singleton.
     """
     if _RAG_INSTANCE is None:
-        # Fallback if not explicitly initialized, though we prefer explicit init
         logger.warning("RAG System accessed before explicit initialization. Initializing now.")
         init_rag_system()
     return _RAG_INSTANCE
 
 
 class JinaEmbeddingFunction(embedding_functions.EmbeddingFunction):
-    def __init__(self, model_name: str = "jinaai/jina-embeddings-v3", default_task: str = "retrieval.passage"):
+    """
+    Custom embedding function for Jina v3 using SentenceTransformers.
+    Supports task-specific embeddings via trust_remote_code=True.
+    """
+
+    def __init__(self, model_name: str = "jinaai/jina-embeddings-v3", default_task: str = "retrieval.passage") -> None:
         """
         Custom embedding function for Jina v3 using SentenceTransformers.
         Supports task-specific embeddings via trust_remote_code=True.
+
+        Args:
+            model_name (str): Name of the Jina v3 model to use.
+            default_task (str): Default task for embeddings.
         """
-        from sentence_transformers import SentenceTransformer
-        # logger.info(f"Loading Jina v3 model: {model_name}")
-        # Use local cache to avoid Windows global cache permission/path issues
         cache_folder = os.path.abspath(".cache")
         self.model = SentenceTransformer(model_name, trust_remote_code=True, cache_folder=cache_folder)
         self.default_task = default_task
 
     def __call__(self, input: List[str]) -> List[List[float]]:
-        # This is called by ChromaDB for indexing (default task: passage)
+        """
+        This is called by ChromaDB for indexing (default task: passage)
+
+        Args:
+            input (List[str]): List of strings to embed.
+
+        Returns:
+            List[List[float]]: List of embeddings for the input strings.
+        """
         return self.model.encode(input, task=self.default_task).tolist()
 
     def embed_query(self, query: str) -> List[float]:
-        # Specific method for queries (task: query)
-        # Returns a single vector
+        """
+        Specific method for queries (task: query)
+        
+        Args:
+            query (str): Query to embed.
+
+        Returns:
+            List[float]: Embedding for the query.
+        """
         return self.model.encode([query], task="retrieval.query")[0].tolist()
 
 
 class RAGSystem:
-    def __init__(self, persist_directory: str = "rag_db_v2", model_repo="alikia2x/jina-embedding-v3-m2v-1024"):
+    """
+    Initializes the RAG system with ChromaDB and Jina Embeddings v3 ONNX.
+    """
+
+    def __init__(self, persist_directory: str = "rag_db_v2", model_repo="alikia2x/jina-embedding-v3-m2v-1024") -> None:
         """
         Initializes the RAG system with ChromaDB and Jina Embeddings v3 ONNX.
+
+        Args:
+            persist_directory (str): Directory to persist the RAG system.
+            model_repo (str): Jina Embeddings v3 ONNX model repository.
         """
         self.persist_directory = persist_directory
-        # Ensure directory exists
         if not os.path.exists(self.persist_directory):
             os.makedirs(self.persist_directory)
 
-        # Initialize ChromaDB client
         self.client = chromadb.PersistentClient(path=self.persist_directory)
 
-        # Initialize Jina Embeddings v3 ONNX
         self.embedding_fn = JinaOnnxEmbeddingFunction(
             model_repo=model_repo
         )
 
-        # Get or create collection (v3_onnx)
         self.collection = self.client.get_or_create_collection(
             name="audiobooks_v3_onnx",
             embedding_function=self.embedding_fn
         )
         logger.info(f"RAG System initialized with ONNX model. Database path: {self.persist_directory}")
 
-    def index_library(self, items_map: Dict[str, Dict]):
+    def index_library(self, items_map: Dict[str, Dict]) -> None:
         """
         Indexes the library items into ChromaDB.
+
+        Args:
+            items_map (Dict[str, Dict]): Map of item IDs to item data.
         """
-        # IDs to add
         ids = []
-        # Documents (text to embed)
         documents = []
-        # Metadatas
         metadatas = []
 
         existing_ids = self.collection.get()["ids"]
@@ -154,7 +190,17 @@ class RAGSystem:
             logger.info("No new items to index.")
 
     def retrieve_similar(self, query_text: str, n_results: int = 5) -> List[str]:
-        # Embed query manually
+        """
+        Retrieves similar items based on the query text.
+
+        Args:
+            query_text (str): Query text to search for similar items.
+            n_results (int): Number of similar items to retrieve.
+
+        Returns:
+            List[str]: List of IDs of similar items.
+        """
+
         query_vec = self.embedding_fn.embed_query(query_text)
         results = self.collection.query(
             query_embeddings=[query_vec],
@@ -165,6 +211,16 @@ class RAGSystem:
         return []
 
     def get_embeddings(self, ids: List[str]) -> List[List[float]]:
+        """
+        Retrieves embeddings for the given IDs.
+
+        Args:
+            ids (List[str]): List of IDs to retrieve embeddings for.
+
+        Returns:
+            List[List[float]]: List of embeddings for the given IDs.
+        """
+
         if not ids: return []
         results = self.collection.get(ids=ids, include=['embeddings'])
         embeddings = results.get('embeddings')
@@ -174,6 +230,17 @@ class RAGSystem:
         return []
 
     def retrieve_by_embedding(self, query_embedding: List[float], n_results: int = 50) -> List[tuple[str, float]]:
+        """
+        Retrieves similar items based on the query embedding.
+
+        Args:
+            query_embedding (List[float]): Query embedding to search for similar items.
+            n_results (int): Number of similar items to retrieve.
+
+        Returns:
+            List[tuple[str, float]]: List of tuples containing IDs and distances of similar items.
+        """
+
         if self.collection.count() == 0: return []
         results = self.collection.query(
             query_embeddings=[query_embedding], 
@@ -186,22 +253,16 @@ class RAGSystem:
         return []
 
 class JinaOnnxEmbeddingFunction(embedding_functions.EmbeddingFunction):
-    def __init__(self, model_repo: str):
+    """
+    Custom embedding function for Jina v3 (or compatible) via ONNX Runtime.
+    """
+
+    def __init__(self, model_repo: str) -> None:
         """
         Custom embedding function for Jina v3 (or compatible) via ONNX Runtime.
-        Requires `onnxruntime` and `tokenizers`.
         """
-        import onnxruntime as ort
-        from tokenizers import Tokenizer
-        from huggingface_hub import hf_hub_download
-        import numpy as np
 
         logger.info(f"Initializing Jina ONNX from: {model_repo}")
-
-        # Download Model and Tokenizer
-        # We need model.onnx and tokenizer.json
-        # Check files via: list_repo_files("alikia2x/jina-embedding-v3-m2v-1024")
-        # Found: onnx/model.onnx and onnx/model_INT8.onnx
         
         try:
              logger.info("Attempting to download quantized ONNX model...")
@@ -220,21 +281,43 @@ class JinaOnnxEmbeddingFunction(embedding_functions.EmbeddingFunction):
         self.output_name = self.session.get_outputs()[0].name
         
     def __call__(self, input: List[str]) -> List[List[float]]:
-        # Indexing / Passage embedding
+        """
+        This is called by ChromaDB for indexing (default task: passage)
+
+        Args:
+            input (List[str]): List of strings to embed.
+
+        Returns:
+            List[List[float]]: List of embeddings for the input strings.
+        """
         return self._embed(input)
 
     def embed_query(self, query: str) -> List[float]:
-        # Query embedding
+        """
+        This is called by ChromaDB for querying (default task: query)
+
+        Args:
+            query (str): String to embed.
+
+        Returns:
+            List[float]: Embedding for the input string.
+        """
         embedding = self._embed([query])
         if embedding:
             return embedding[0]
         return []
         
     def _embed(self, texts: List[str]) -> List[List[float]]:
-        import numpy as np
-        
-        # Tokenize
-        # Jina v3 tokenization
+        """
+        This is called by ChromaDB for indexing (default task: passage)
+
+        Args:
+            texts (List[str]): List of strings to embed.
+
+        Returns:
+            List[List[float]]: List of embeddings for the input strings.
+        """
+
         encoded = self.tokenizer.encode_batch(texts)
         
         input_names = [i.name for i in self.session.get_inputs()]
@@ -248,9 +331,6 @@ class JinaOnnxEmbeddingFunction(embedding_functions.EmbeddingFunction):
              
              for e in encoded:
                  offsets.append(current_offset)
-                 # Filter out special tokens (CLS/SEP/PAD) if needed, but tokenizer usually handles it.
-                 # For M2V, usually we keep content tokens.
-                 # Simply extend for now.
                  ids = e.ids
                  # Remove padding (0) if present in ids (Model2Vec usually doesn't need padding in flat array)
                  ids = [i for i in ids if i != 0] 
@@ -277,30 +357,19 @@ class JinaOnnxEmbeddingFunction(embedding_functions.EmbeddingFunction):
             if "token_type_ids" in input_names:
                  ort_inputs["token_type_ids"] = np.zeros_like(input_ids)
         
-        
-        # Debugging model inputs
-        # for i in self.session.get_inputs():
-        #     print(f"Model Input: {i.name}, Type: {i.type}, Shape: {i.shape}")
 
         try:
             outputs = self.session.run(None, ort_inputs)
-            # Output is usually [batch_size, hidden_size] for M2V
             output = outputs[0]
-            
-            # If 3D, do pooling
+        
             if len(output.shape) == 3:
-                # Perform Mean Pooling with Attention Mask
-                # (Only for BERT style)
-                # ... (existing pooling logic) ...
                 mask_expanded = np.expand_dims(attention_mask, axis=-1)
                 sum_embeddings = np.sum(output * mask_expanded, axis=1)
                 sum_mask = np.clip(np.sum(mask_expanded, axis=1), a_min=1e-9, a_max=None)
                 embeddings = sum_embeddings / sum_mask
             else:
-                # 2D output (already pooled or M2V)
                 embeddings = output
                 
-            # Normalize
             norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
             embeddings = embeddings / np.clip(norms, a_min=1e-9, a_max=None)
             
