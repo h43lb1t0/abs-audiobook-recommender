@@ -16,6 +16,8 @@ from recommend_lib.llm import generate_book_recommendations
 
 from recommend_lib.rag import get_rag_system
 
+from sklearn.cluster import KMeans
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -66,7 +68,9 @@ def rank_candidates(
 
     top_genres: Set[str],
 
-    top_authors: Set[str]
+    top_authors: Set[str],
+
+    user_id: str = None
 
 ) -> List[Dict]:
 
@@ -74,7 +78,9 @@ def rank_candidates(
 
     Ranks unread books based on RAG similarity to finished books and user preferences.
 
-    Uses Mean Pooling of finished books to query RAG.
+    Uses a Two-Phase Rating System:
+    1. Query phase: Find candidates similar to positively-rated books (4-5★)
+    2. Penalty phase: Demote candidates similar to negatively-rated books (1-2★)
 
     Annotates books with '_rag_score' and '_match_reasons'.
 
@@ -91,72 +97,105 @@ def rank_candidates(
     rag = get_rag_system()
     
 
-    # 1. Get embeddings for seed books
-
-    seed_ids = [book['id'] for book in finished_books if book.get('id')]
-
-    seed_embeddings = rag.get_embeddings(seed_ids)
+    # Get user ratings if available
+    ratings_map = {}
+    if user_id:
+        ratings_map = get_user_ratings(user_id)
+        logger.info(f"Loaded {len(ratings_map)} user ratings")
     
 
-    candidate_match_counts = Counter()
-
-    # Note: With mean pooling, we lose the direct "this book matched that book" mapping 
-
-    # unless we do a second pass or keep the old logic. 
-
-    # For now, we'll lose the granular "matched because of X" specific book reason in this step,
-
-    # but we can infer it or just use generic "High similarity to your library".
+    # Separate books by rating category
+    positive_ids = []  # 4-5 stars (liked)
+    negative_ids = []  # 1-2 stars (disliked)
+    neutral_ids = []   # 3 stars or unrated
     
+    for book in finished_books:
+        book_id = book.get('id')
+        if not book_id:
+            continue
+        rating = ratings_map.get(book_id, 3)  # Default to neutral
+        if rating >= 4:
+            positive_ids.append(book_id)
+        elif rating <= 2:
+            negative_ids.append(book_id)
+        else:
+            neutral_ids.append(book_id)
+    
+    logger.info(f"Rating categories: {len(positive_ids)} liked (4-5★), {len(negative_ids)} disliked (1-2★), {len(neutral_ids)} neutral")
+    
+    candidate_scores = Counter()
+    
+    # === PHASE 1: Query with positive-rated books ===
+    # If user has rated books positively, use those as the profile
+    # Otherwise fall back to all finished books
+    
+    # === PHASE 1: Query with positive-rated books ===
+    # If user has rated books positively, use those as the profile
+    # Otherwise fall back to all finished books
+    
+    query_embeddings = []
+    log_prefix = ""
+    
+    if positive_ids:
+        query_embeddings = rag.get_embeddings(positive_ids)
+        log_prefix = f"Phase 1: Querying with {len(positive_ids)} positively-rated books"
+    else:
+        # Fallback: use all finished books if no positive ratings
+        all_ids = [book['id'] for book in finished_books if book.get('id')]
+        query_embeddings = rag.get_embeddings(all_ids)
+        log_prefix = f"Phase 1 (fallback): Querying with all {len(all_ids)} finished books"
 
-    if seed_embeddings and len(seed_embeddings) > 0:
-
-        # 2. Calculate Mean Vector
-
-        # Assuming all embeddings are same length.
-
-        # Simple average.
-
-        vector_length = len(seed_embeddings[0])
-
-        mean_vector = [0.0] * vector_length
+    if query_embeddings:
+        # Use Clustering instead of single mean vector
+        cluster_vectors = calculate_cluster_vectors(query_embeddings, max_clusters=5)
+        logger.info(f"{log_prefix} -> Generated {len(cluster_vectors)} clusters")
         
-
-        for emb in seed_embeddings:
-
-            for i, val in enumerate(emb):
-
-                mean_vector[i] += val
-                
-
-        for i in range(vector_length):
-
-            mean_vector[i] /= len(seed_embeddings)
+        # We need to being careful not to over-boost if a book is found by multiple clusters.
+        # But maybe we WANT to over-boost that? A book that fits multiple taste clusters is probably efficient?
+        # Or maybe it just means it's generic?
+        # Let's just sum the scores for now, effectively implementing "OR" logic with accumulation.
+        
+        # To avoid diluting the score (since we run N searches), we might want to normalize?
+        # But rank is rank.
+        
+        for i, vector in enumerate(cluster_vectors):
+            # Retrieve for this cluster
+            similar_ids = rag.retrieve_by_embedding(vector, n_results=100) # Reduced from 150 to keep total processing sane
             
+            for idx, sid in enumerate(similar_ids):
+                # Higher score for better rank
+                # base_score = 100 - idx
+                base_score = max(0, 100 - idx)
+                
+                # If using positive rating, boost is 2.0x, if fallback, 1.0x
+                mult = 2.0 if positive_ids else 1.0
+                
+                # Accumulate score. A book found in cluster A AND cluster B gets added up.
+                candidate_scores[sid] += base_score * mult
+                
+    
+    # === PHASE 2: Penalize similarity to negatively-rated books ===
+    if negative_ids:
+        negative_embeddings = rag.get_embeddings(negative_ids)
+        if negative_embeddings:
+            # Use clustering for negative too
+            negative_cluster_vectors = calculate_cluster_vectors(negative_embeddings, max_clusters=5)
+            logger.info(f"Phase 2: Penalizing similarity to {len(negative_ids)} negatively-rated books -> {len(negative_cluster_vectors)} clusters")
+            
+            for vector in negative_cluster_vectors:
+                # Find books similar to disliked content clusters
+                disliked_similar = rag.retrieve_by_embedding(vector, n_results=100)
+                
+                for idx, sid in enumerate(disliked_similar):
+                    # Penalty
+                    penalty = max(0, 100 - idx) * 1.5
+                    
+                    # We subtract from the score
+                    candidate_scores[sid] -= penalty
 
-        logger.info(f"Calculated mean vector from {len(seed_embeddings)} seed books.")
-        
-
-        # 3. Query RAG with mean vector
-
-        # Fetch more results since this is a broad query
-
-        similar_ids = rag.retrieve_by_embedding(mean_vector, n_results=100)
-        
-
-        # Create a score map from the order (higher rank = better)
-
-        # similar_ids is ordered by similarity
-
-        for idx, sid in enumerate(similar_ids):
-
-            # Linearly decreasing score based on rank
-
-            # e.g. 1st = 100, 2nd = 99...
-
-            score = max(0, 100 - idx) 
-
-            candidate_match_counts[sid] = score
+            # Verify how many were penalized
+            # (Just logging generic info)
+            logger.info("Applied penalties based on negative clusters.")
 
 
     ranked_books = []
@@ -166,7 +205,7 @@ def rank_candidates(
 
         book_id = book['id']
 
-        match_score = candidate_match_counts.get(book_id, 0)
+        match_score = candidate_scores.get(book_id, 0)
         
 
         # Calculate preference bonus
@@ -189,17 +228,16 @@ def rank_candidates(
 
         book['_rag_score'] = total_score
 
-        # For mean pooling, we don't have specific seed book matches easily. 
-
-        # But we can indicate it matched the profile.
-
-        if match_score > 0:
-
-            book['_match_reasons'] = ["Matches your reading profile"]
-
-        else:
-
-            book['_match_reasons'] = [] 
+        # Match reasons based on score components
+        reasons = []
+        if match_score > 50:
+            reasons.append("Similar to books you loved")
+        elif match_score > 0:
+            reasons.append("Matches your reading profile")
+        elif match_score < -50:
+            reasons.append("Note: Similar to books you disliked")
+        
+        book['_match_reasons'] = reasons
         
 
         ranked_books.append(book)
@@ -240,6 +278,129 @@ def calculate_mean_vector(embeddings: List[List[float]]) -> List[float]:
         
 
     return mean_vector
+
+
+def calculate_cluster_vectors(embeddings: List[List[float]], max_clusters: int = 5) -> List[List[float]]:
+    """
+    Performs K-Means clustering on embeddings to identify distinct taste profiles.
+    Returns a list of cluster centers.
+    """
+    if not embeddings:
+        return []
+    
+    # If we have very few data points, just use them as they are (or their mean if it's just 1)
+    # But for consistency, if we have 1, we return it.
+    if len(embeddings) == 1:
+        return embeddings
+        
+    # Heuristic: Use min(len(embeddings), max_clusters)
+    # If we have 3 books, we make 3 clusters (which centers on them). 
+    # This is better than averaging disparate books.
+    n_clusters = min(len(embeddings), max_clusters)
+    
+    try:
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+        kmeans.fit(embeddings)
+        return kmeans.cluster_centers_.tolist()
+    except Exception as e:
+        logger.error(f"KMeans failed: {e}. Falling back to mean vector.")
+        return [calculate_mean_vector(embeddings)]
+
+
+# Rating weights mapping: stars -> weight
+RATING_WEIGHTS = {
+    5: 2.0,
+    4: 1.0,
+    3: 0.0,
+    2: -0.5,
+    1: -1.5
+}
+
+
+def calculate_weighted_user_vector(
+    embeddings: List[List[float]], 
+    book_ids: List[str],
+    ratings_map: Dict[str, int]
+) -> List[float]:
+    """
+    Calculates a weighted user vector based on book ratings.
+    
+    Formula: V_user = sum(V_book * Weight) / sum(|Weight|)
+    
+    Args:
+        embeddings: List of embedding vectors for each book
+        book_ids: List of book IDs corresponding to each embedding
+        ratings_map: Dictionary mapping book_id -> rating (1-5)
+        
+    Returns:
+        Weighted user vector
+    """
+    if not embeddings:
+        return []
+    
+    vector_length = len(embeddings[0])
+    weighted_vector = [0.0] * vector_length
+    total_abs_weight = 0.0
+    
+    positive_count = 0
+    negative_count = 0
+    neutral_count = 0
+    
+    for emb, book_id in zip(embeddings, book_ids):
+        # Get rating weight, default to 3 stars (neutral) if unrated
+        rating = ratings_map.get(book_id, 3)
+        weight = RATING_WEIGHTS.get(rating, 0.0)
+        
+        # Track counts for logging
+        if weight > 0:
+            positive_count += 1
+        elif weight < 0:
+            negative_count += 1
+        else:
+            neutral_count += 1
+        
+        # Skip neutral weights (3 stars) as they don't contribute
+        if weight == 0.0:
+            continue
+            
+        total_abs_weight += abs(weight)
+        
+        for i, val in enumerate(emb):
+            weighted_vector[i] += val * weight
+    
+    logger.info(f"Rating weights applied: {positive_count} positive (4-5★), {negative_count} negative (1-2★), {neutral_count} neutral (3★/unrated)")
+    logger.info(f"Total absolute weight: {total_abs_weight}")
+    
+    # Normalize by total absolute weight
+    if total_abs_weight > 0:
+        for i in range(vector_length):
+            weighted_vector[i] /= total_abs_weight
+    else:
+        # Fallback to simple mean if no valid weights
+        logger.warning("No valid rating weights found, falling back to simple mean vector")
+        return calculate_mean_vector(embeddings)
+    
+    return weighted_vector
+
+
+def get_user_ratings(user_id: str) -> Dict[str, int]:
+    """
+    Fetches user ratings from the database.
+    
+    Args:
+        user_id: The user's ID
+        
+    Returns:
+        Dictionary mapping book_id -> rating (1-5)
+    """
+    from db import UserLib
+    
+    try:
+        user_ratings = UserLib.query.filter_by(user_id=user_id).all()
+        return {r.book_id: r.rating for r in user_ratings if r.rating is not None}
+    except Exception as e:
+        logger.warning(f"Could not fetch user ratings: {e}")
+        return {}
 
 
 def cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
@@ -538,23 +699,30 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
 
     # --- RANKING ---
 
-    # --- RANKING ---
-
-    ranked_candidates = rank_candidates(unread_books_candidates, finished_books_list, top_genres, top_authors)
+    ranked_candidates = rank_candidates(unread_books_candidates, finished_books_list, top_genres, top_authors, user_id)
     
 
     # --- COLLABORATIVE FILTERING BONUS ---
 
-    # Need current user's mean vector - recalculate or extract from rank_candidates?
-
-    # rank_candidates calculated it internally but didn't return it. 
-
-    # Let's extract getting the mean vector into a variable if possible, or just recalculate (cheap).
+    # Use positive-rated books for user profile (consistent with rank_candidates)
     
-
-    current_seed_ids = [book['id'] for book in finished_books_list if book.get('id')]
-
-    current_embeddings = rag.get_embeddings(current_seed_ids)
+    ratings_map = get_user_ratings(user_id) if user_id else {}
+    
+    # Get positive-rated book IDs
+    positive_ids = []
+    for book in finished_books_list:
+        book_id = book.get('id')
+        if book_id:
+            rating = ratings_map.get(book_id, 3)
+            if rating >= 4:
+                positive_ids.append(book_id)
+    
+    # Use positive books if available, otherwise fall back to all
+    if positive_ids:
+        current_embeddings = rag.get_embeddings(positive_ids)
+    else:
+        current_seed_ids = [book['id'] for book in finished_books_list if book.get('id')]
+        current_embeddings = rag.get_embeddings(current_seed_ids)
     
 
     if current_embeddings:
