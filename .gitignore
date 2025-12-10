@@ -21,6 +21,7 @@ rag_db_v2
 prompt_debug.txt
 items_map.json
 items_resp.json
+verify*
 
 # Cache files
 .cache/
