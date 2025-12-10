@@ -169,24 +169,19 @@ def rank_candidates(
     if negative_ids:
         negative_embeddings = rag.get_embeddings(negative_ids)
         if negative_embeddings:
-            # Use clustering for negative too
-            negative_cluster_vectors = calculate_cluster_vectors(negative_embeddings, max_clusters=5)
-            logger.info(f"Phase 2: Penalizing similarity to {len(negative_ids)} negatively-rated books -> {len(negative_cluster_vectors)} clusters")
+            # Back to mean vector for negative
+            negative_vector = calculate_mean_vector(negative_embeddings)
+            logger.info(f"Phase 2: Penalizing similarity to {len(negative_ids)} negatively-rated books (single mean vector)")
             
-            for vector in negative_cluster_vectors:
-                # Find books similar to disliked content clusters
-                disliked_similar = rag.retrieve_by_embedding(vector, n_results=100)
-                
-                for idx, sid in enumerate(disliked_similar):
-                    # Penalty
-                    penalty = max(0, 100 - idx) * 1.5
-                    
-                    # We subtract from the score
-                    candidate_scores[sid] -= penalty
+            # Find books similar to disliked content
+            disliked_similar = rag.retrieve_by_embedding(negative_vector, n_results=100)
+            
+            for idx, sid in enumerate(disliked_similar):
+                # Penalty
+                penalty = max(0, 100 - idx) * 1.5
+                candidate_scores[sid] -= penalty
 
-            # Verify how many were penalized
-            # (Just logging generic info)
-            logger.info("Applied penalties based on negative clusters.")
+            logger.info(f"Applied penalties to {len(disliked_similar)} candidates")
 
 
     ranked_books = []
@@ -497,38 +492,50 @@ def get_collaborative_recommendations(
             continue
             
 
-        if not embeddings:
-            continue
-            
-
         user_cluster_vectors = calculate_cluster_vectors(embeddings, max_clusters=5)
         
-
-        sim = calculate_max_cluster_similarity(current_user_clusters, user_cluster_vectors)
+        # Calculate similarity AND find matching clusters
+        # We want to find clusters of THEIRS that match ANY of MINE
+        
+        matching_vectors = []
+        max_user_sim = 0.0
+        
+        for their_vec in user_cluster_vectors:
+            # Check if this cluster matches any of my clusters
+            best_match_score = 0.0
+            for my_vec in current_user_clusters:
+                sim = cosine_similarity(my_vec, their_vec)
+                if sim > best_match_score:
+                    best_match_score = sim
+            
+            if best_match_score > max_user_sim:
+                max_user_sim = best_match_score
+            
+            # If this cluster is similar enough to one of mine, include it
+            if best_match_score > 0.6: # Configurable threshold
+                matching_vectors.append(their_vec)
         
 
-        # logger.debug(f"User {username} similarity: {sim}")
-        
+        if max_user_sim > best_similarity:
 
-        if sim > best_similarity:
-
-            best_similarity = sim
+            best_similarity = max_user_sim
 
             most_similar_user = user
 
-            most_similar_mean_vector = user_cluster_vectors # Storing clusters now
+            # ONLY store the clusters that matched
+            most_similar_mean_vector = matching_vectors 
             
 
-    if most_similar_user and best_similarity > 0.5: # Threshold for "similar enough"
+    if most_similar_user and best_similarity > 0.5 and most_similar_mean_vector: 
 
         logger.info(f"Most similar user found: {most_similar_user.get('username')} with score {best_similarity}")
-        
+        logger.info(f"Using {len(most_similar_mean_vector)} matching clusters for cross-recommendation.")
 
-        # Get recommendations for this similar user using their *clusters*
+        # Get recommendations for this similar user using their *matching clusters*
         
         similar_ids_set = set()
         
-        # Iterate over their clusters to get books
+        # Iterate over their matching clusters to get books
         for vector in most_similar_mean_vector:
              ids = rag_system.retrieve_by_embedding(vector, n_results=20)
              similar_ids_set.update(ids)
