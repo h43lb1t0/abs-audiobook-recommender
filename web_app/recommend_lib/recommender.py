@@ -151,12 +151,26 @@ def rank_candidates(
         
         for i, vector in enumerate(cluster_vectors):
             # Retrieve for this cluster
-            similar_ids = rag.retrieve_by_embedding(vector, n_results=100) # Reduced from 150 to keep total processing sane
+            similar_items = rag.retrieve_by_embedding(vector, n_results=100) # Reduced from 150 to keep total processing sane
             
-            for idx, sid in enumerate(similar_ids):
-                # Higher score for better rank
-                # base_score = 100 - idx
-                base_score = max(0, 100 - idx)
+            for idx, (sid, dist) in enumerate(similar_items):
+                # Calculate similarity score from distance
+                # Assuming Squared L2 Euclidean distance on normalized vectors: Distance = 2 - 2*CosineSimilarity
+                # So CosineSimilarity = 1 - Distance/2
+                # Range of Distance is 0 to 4. 0 is identical.
+                
+                # Convert to 0-100 scale
+                # Similarity 1.0 -> 100
+                # Similarity 0.0 -> 0
+                # Similarity -1.0 -> -100
+                
+                # Safety clamp for distance
+                safe_dist = max(0.0, dist)
+                similarity = 1.0 - (safe_dist / 2.0)
+                
+                # Base score: heavily weight high similarity
+                # We want a sharp drop off.
+                base_score = similarity * 100.0
                 
                 # If using positive rating, boost is 2.0x, if fallback, 1.0x
                 mult = 2.0 if positive_ids else 1.0
@@ -176,10 +190,16 @@ def rank_candidates(
             # Find books similar to disliked content
             disliked_similar = rag.retrieve_by_embedding(negative_vector, n_results=100)
             
-            for idx, sid in enumerate(disliked_similar):
-                # Penalty
-                penalty = max(0, 100 - idx) * 1.5
-                candidate_scores[sid] -= penalty
+            for idx, (sid, dist) in enumerate(disliked_similar):
+                # Penalty based on similarity
+                # If very similar (low distance), high penalty.
+                
+                safe_dist = max(0.0, dist)
+                similarity = 1.0 - (safe_dist / 2.0)
+                
+                if similarity > 0:
+                    penalty = similarity * 100.0 * 1.5
+                    candidate_scores[sid] -= penalty
 
             logger.info(f"Applied penalties to {len(disliked_similar)} candidates")
 
@@ -537,8 +557,9 @@ def get_collaborative_recommendations(
         
         # Iterate over their matching clusters to get books
         for vector in most_similar_mean_vector:
-             ids = rag_system.retrieve_by_embedding(vector, n_results=20)
-             similar_ids_set.update(ids)
+             items = rag_system.retrieve_by_embedding(vector, n_results=20)
+             # items is list of (id, dist)
+             similar_ids_set.update([item[0] for item in items])
              
         similar_ids = list(similar_ids_set)
         

@@ -173,10 +173,16 @@ class RAGSystem:
             return embeddings
         return []
 
-    def retrieve_by_embedding(self, query_embedding: List[float], n_results: int = 50) -> List[str]:
+    def retrieve_by_embedding(self, query_embedding: List[float], n_results: int = 50) -> List[tuple[str, float]]:
         if self.collection.count() == 0: return []
-        results = self.collection.query(query_embeddings=[query_embedding], n_results=n_results)
-        if results and results['ids']: return results['ids'][0]
+        results = self.collection.query(
+            query_embeddings=[query_embedding], 
+            n_results=n_results,
+            include=['documents', 'metadatas', 'distances']
+        )
+        if results and results['ids'] and results['distances']: 
+            zipped = list(zip(results['ids'][0], results['distances'][0]))
+            return zipped
         return []
 
 class JinaOnnxEmbeddingFunction(embedding_functions.EmbeddingFunction):
