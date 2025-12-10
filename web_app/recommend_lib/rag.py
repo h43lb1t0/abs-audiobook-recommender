@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import chromadb
 import numpy as np
@@ -229,7 +229,7 @@ class RAGSystem:
             return embeddings
         return []
 
-    def retrieve_by_embedding(self, query_embedding: List[float], n_results: int = 50) -> List[tuple[str, float]]:
+    def retrieve_by_embedding(self, query_embedding: List[float], n_results: int = 50) -> List[Tuple[str, float]]:
         """
         Retrieves similar items based on the query embedding.
 

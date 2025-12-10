@@ -144,9 +144,9 @@ def rank_candidates(
                 
                 base_score = similarity * 100.0
                 
-                mult = 2.0 if positive_ids else 1.0
+                score_multiplier = 2.0 if positive_ids else 1.0
                 
-                candidate_scores[sid] += base_score * mult
+                candidate_scores[sid] += base_score * score_multiplier
                 
     
     # === PHASE 2: Penalize similarity to negatively-rated books ===
