@@ -17,6 +17,11 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     -   Connect a LLM (like `llama-server`) to get personalized, explained reasons for each recommendation.
     -   If no LLM is provided, the system provides high-quality ranked matches based on similarity scores.
 -   **Collaborative Filtering**: Leverages reading patterns from other users on your server to boost relevant recommendations.
+-   **Listening History & Ratings**:
+    -   View all your finished audiobooks in one place.
+    -   Rate books 1-5 stars with an interactive star rating widget.
+    -   Books are grouped by series and sorted by sequence number.
+    -   Ratings are saved to a local database for future use in recommendations.
 -   **Web Interface**: A clean, responsive UI to view recommendations.
 -   **Privacy Focused**: All analysis happens locally. Book data is only sent to your local LLM (if configured).
 
@@ -84,7 +89,7 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
 - [x] Multi-user support
 - [x] Login system
 - [x] Advanced RAG Integration
-- [ ] Scoring system for your audiobooks that will also be used for recommendations 
+- [x] Scoring system for your audiobooks (Listening History with 1-5 star ratings)
 - [ ] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the LLM
 - [ ] Docker containerization for easier deployment
 - [ ] Enhanced UI/UX design

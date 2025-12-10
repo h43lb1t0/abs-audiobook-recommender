@@ -18,5 +18,6 @@ class UserLib(db.Model):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.id"))
     book_id: Mapped[str] = mapped_column(String(255))
+    rating: Mapped[int] = mapped_column(Integer, nullable=True)  # 1-5 stars, nullable for unrated books
 
 

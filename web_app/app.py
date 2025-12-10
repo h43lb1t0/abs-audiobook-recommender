@@ -12,8 +12,8 @@ from recommend_lib.rag import init_rag_system
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-from recommend_lib.abs_api import get_abs_users
-from db import db, User
+from recommend_lib.abs_api import get_abs_users, get_all_items, get_finished_books
+from db import db, User, UserLib
 
 load_dotenv()
 
@@ -145,6 +145,111 @@ def index():
     Returns the index.html file
     """
     return render_template('index.html')
+
+@app.route('/history')
+@login_required
+def listening_history():
+    """
+    Returns the listening history page
+    """
+    return render_template('listening_history.html')
+
+@app.route('/api/listening-history')
+@login_required
+def get_listening_history():
+    """
+    Returns the user's finished books with their ratings
+    """
+    try:
+        items_map, _ = get_all_items()
+        finished_ids, _, _ = get_finished_books(items_map, user_id=current_user.id)
+        
+        # Get user's ratings from database
+        user_ratings = UserLib.query.filter_by(user_id=current_user.id).all()
+        ratings_map = {r.book_id: r.rating for r in user_ratings}
+        
+        finished_books = []
+        for book_id in finished_ids:
+            if book_id in items_map:
+                book = items_map[book_id]
+                # Parse series_sequence as float for proper sorting (handles "1", "1.5", "2", etc.)
+                seq = book.get('series_sequence')
+                try:
+                    seq_num = float(seq) if seq else float('inf')
+                except (ValueError, TypeError):
+                    seq_num = float('inf')
+                
+                finished_books.append({
+                    'id': book['id'],
+                    'title': book['title'],
+                    'author': book['author'],
+                    'series': book.get('series'),
+                    'series_sequence': book.get('series_sequence'),
+                    'series_sequence_num': seq_num,
+                    'rating': ratings_map.get(book_id)
+                })
+        
+        # Sort: first by series name (None/standalone at the end), then by sequence within series
+        finished_books.sort(key=lambda x: (
+            x['series'] is None,  # Books with series come first
+            (x['series'] or '').lower(),  # Then alphabetically by series name
+            x['series_sequence_num']  # Then by sequence number within series
+        ))
+        
+        # Remove the temporary sorting field before sending
+        for book in finished_books:
+            del book['series_sequence_num']
+        
+        return jsonify(finished_books)
+    except Exception as e:
+        logger.error(f"Error fetching listening history: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/rate-book', methods=['POST'])
+@login_required
+def rate_book():
+    """
+    Saves or updates a book rating for the current user
+    """
+    try:
+        data = request.get_json()
+        book_id = data.get('book_id')
+        rating = data.get('rating')
+        
+        if not book_id:
+            return jsonify({"error": "book_id is required"}), 400
+        
+        if rating is not None and (rating < 1 or rating > 5):
+            return jsonify({"error": "Rating must be between 1 and 5"}), 400
+        
+        # Check if rating already exists
+        existing = UserLib.query.filter_by(user_id=current_user.id, book_id=book_id).first()
+        
+        if existing:
+            existing.rating = rating
+        else:
+            new_entry = UserLib(user_id=current_user.id, book_id=book_id, rating=rating)
+            db.session.add(new_entry)
+        
+        db.session.commit()
+        return jsonify({"success": True, "book_id": book_id, "rating": rating})
+    except Exception as e:
+        logger.error(f"Error saving rating: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/ratings')
+@login_required
+def get_ratings():
+    """
+    Returns all ratings for the current user
+    """
+    try:
+        user_ratings = UserLib.query.filter_by(user_id=current_user.id).all()
+        ratings = {r.book_id: r.rating for r in user_ratings if r.rating is not None}
+        return jsonify(ratings)
+    except Exception as e:
+        logger.error(f"Error fetching ratings: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/recommend')
 @login_required
