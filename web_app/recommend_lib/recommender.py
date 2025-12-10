@@ -517,8 +517,6 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
     
     rag = get_rag_system()
 
-    rag.index_library(items_map)
-
     finished_ids, in_progress_ids, finished_keys = get_finished_books(items_map, user_id)
     
     cleaned_finished_keys = set()

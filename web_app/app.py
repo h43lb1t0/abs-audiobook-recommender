@@ -10,7 +10,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_socketio import SocketIO, emit
 
 from recommend_lib.recommender import get_recommendations
-from recommend_lib.rag import init_rag_system
+from recommend_lib.rag import init_rag_system, get_rag_system
+from flask_apscheduler import APScheduler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,6 +35,10 @@ logger.debug(f"Database path: {db_path}")
 
 db.init_app(app)
 
+scheduler = APScheduler()
+scheduler.init_app(app)
+scheduler.start()
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -47,6 +52,22 @@ def init_db():
         # Ensure instance directory exists
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         db.create_all()
+        
+        # Ensure root user exists
+        root_user = db.session.get(User, 'root')
+        if not root_user:
+            logger.info("Creating root user...")
+            root_password = os.getenv('ROOT_PASSWORD', 'admin')
+            hashed_root_pw = generate_password_hash(root_password)
+            new_root = User(
+                id='root',
+                username='root',
+                password=hashed_root_pw
+            )
+            db.session.add(new_root)
+            db.session.commit()
+            logger.info("Root user created.")
+            
         sync_abs_users()
 
 def sync_abs_users():
@@ -375,6 +396,47 @@ def proxy_cover(item_id):
                if name.lower() not in excluded_headers]
                
     return Response(resp.content, resp.status_code, headers)
+
+def scheduled_indexing():
+    """
+    Scheduled task to index the library
+    """
+    with app.app_context():
+        logger.info("Starting scheduled library indexing...")
+        try:
+             items_map, _ = get_all_items()
+             rag = get_rag_system()
+             rag.index_library(items_map)
+             logger.info("Scheduled library indexing complete.")
+        except Exception as e:
+             logger.error(f"Error in scheduled indexing: {e}")
+
+# Schedule task to run every 6 hours
+scheduler.add_job(id='scheduled_indexing', func=scheduled_indexing, trigger='interval', hours=6)
+
+@app.route('/api/admin/force-sync', methods=['POST'])
+@login_required
+def force_sync():
+    """
+    Force triggers the library indexing (Root only)
+    """
+    if current_user.id != 'root':
+        return jsonify({"error": "Unauthorized"}), 403
+        
+    # Run synchronously for immediate feedback, or trigger background job
+    # For now, let's run it essentially synchronously or fire-and-forget but return success
+    
+    # We can just call the function directly
+    # Note: This might timeout if library is huge, but for now it's fine
+    try:
+        logger.info("Force sync triggered by root user.")
+        items_map, _ = get_all_items()
+        rag = get_rag_system()
+        rag.index_library(items_map)
+        return jsonify({"status": "success", "message": "Indexing triggered"})
+    except Exception as e:
+        logger.error(f"Error in force sync: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     init_db()
