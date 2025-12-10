@@ -5,32 +5,64 @@ document.addEventListener('DOMContentLoaded', () => {
     const loader = generateBtn.querySelector('.loader');
     const btnText = generateBtn.querySelector('.btn-text');
 
-    generateBtn.addEventListener('click', async () => {
-        // Reset state
-        resultsContainer.innerHTML = '';
-        resultsContainer.classList.add('hidden');
-        errorMessage.classList.add('hidden');
+    async function fetchRecommendations(refresh = false) {
+        // Reset state if refreshing
+        if (refresh) {
+            resultsContainer.innerHTML = '';
+            resultsContainer.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+        }
 
         // Loading state
         generateBtn.disabled = true;
-        loader.classList.remove('hidden');
-        btnText.textContent = 'Generating...';
+        if (refresh) {
+            loader.classList.remove('hidden');
+            btnText.textContent = 'Generating...';
+        }
 
         try {
-            const response = await fetch('/api/recommend');
+            const url = refresh ? '/api/recommend?refresh=true' : '/api/recommend';
+            const response = await fetch(url);
 
             if (!response.ok) {
                 const errData = await response.json();
                 throw new Error(errData.error || 'Failed to fetch recommendations');
             }
 
-            const recommendations = await response.json();
+            const data = await response.json();
+            
+            // Handle response structure { recommendations: [], generated_at: "" } or fallback
+            let recommendations = [];
+            let generatedAt = null;
+
+            if (Array.isArray(data)) {
+                recommendations = data;
+            } else if (data.recommendations) {
+                recommendations = data.recommendations;
+                generatedAt = data.generated_at;
+            }
 
             if (recommendations.length === 0) {
                 throw new Error('No recommendations found. Check your library or API key.');
             }
 
             renderRecommendations(recommendations);
+            
+            const lastUpdatedEl = document.getElementById('last-updated');
+            if (generatedAt) {
+                const date = new Date(generatedAt);
+                lastUpdatedEl.textContent = `Last generated: ${date.toLocaleString(undefined, {
+                    year: 'numeric',
+                    month: 'numeric', 
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit'
+                })}`;
+                lastUpdatedEl.classList.remove('hidden');
+            } else {
+                lastUpdatedEl.classList.add('hidden');
+            }
+
             resultsContainer.classList.remove('hidden');
 
         } catch (error) {
@@ -42,7 +74,12 @@ document.addEventListener('DOMContentLoaded', () => {
             loader.classList.add('hidden');
             btnText.textContent = 'Generate Recommendations';
         }
-    });
+    }
+
+    generateBtn.addEventListener('click', () => fetchRecommendations(true));
+    
+    // Initial fetch on load
+    fetchRecommendations(false);
 
     function renderRecommendations(books) {
         books.forEach(book => {

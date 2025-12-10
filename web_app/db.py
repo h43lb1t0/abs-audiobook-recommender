@@ -21,3 +21,12 @@ class UserLib(db.Model):
     rating: Mapped[int] = mapped_column(Integer, nullable=True)  # 1-5 stars, nullable for unrated books
 
 
+
+class UserRecommendations(db.Model):
+    __tablename__ = "user_recommendations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.id"))
+    recommendations_json: Mapped[str] = mapped_column(db.Text)
+    created_at: Mapped[str] = mapped_column(String(255)) # ISO8601 string
+
