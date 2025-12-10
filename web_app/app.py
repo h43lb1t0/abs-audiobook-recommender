@@ -7,10 +7,10 @@ from datetime import datetime
 from dotenv import load_dotenv
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_socketio import SocketIO, emit
 
 from recommend_lib.recommender import get_recommendations
 from recommend_lib.rag import init_rag_system
-
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,6 +21,8 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key") # Needed for sessions
+socketio = SocketIO(app)
+
 ABS_URL = os.getenv("ABS_URL")
 ABS_TOKEN = os.getenv("ABS_TOKEN")
 
@@ -299,6 +301,58 @@ def recommend():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@socketio.on('get_recommendations')
+def handle_get_recommendations(data):
+    """
+    WebSocket handler for generating recommendations
+    """
+    if not current_user.is_authenticated:
+        emit('error', {'error': 'Authentication required'})
+        return
+
+    refresh = data.get('refresh', False)
+    
+    try:
+        if not refresh:
+            # Try to fetch from DB
+            existing_recs = UserRecommendations.query.filter_by(user_id=current_user.id).first()
+            if existing_recs:
+                logger.info(f"Returning cached recommendations for user {current_user.id}")
+                emit('recommendations_ready', {
+                    "recommendations": json.loads(existing_recs.recommendations_json),
+                    "generated_at": existing_recs.created_at
+                })
+                return
+        
+        # Calculate new recommendations
+        recs = get_recommendations(user_id=current_user.id)
+        
+        # Save to DB (overwrite)
+        current_time = datetime.now().isoformat()
+        
+        existing_recs = UserRecommendations.query.filter_by(user_id=current_user.id).first()
+        with app.app_context(): # Ensure DB context
+             existing_recs = UserRecommendations.query.filter_by(user_id=current_user.id).first()
+             if existing_recs:
+                 existing_recs.recommendations_json = json.dumps(recs)
+                 existing_recs.created_at = current_time
+             else:
+                 new_recs = UserRecommendations(
+                     user_id=current_user.id,
+                     recommendations_json=json.dumps(recs),
+                     created_at=current_time
+                 )
+                 db.session.add(new_recs)
+             db.session.commit()
+        
+        emit('recommendations_ready', {
+            "recommendations": recs, 
+            "generated_at": current_time
+        })
+    except Exception as e:
+        logger.error(f"Error in websocket recommendation: {e}")
+        emit('error', {"error": str(e)})
+
 @app.route('/api/cover/<item_id>')
 @login_required
 def proxy_cover(item_id):
@@ -325,5 +379,4 @@ def proxy_cover(item_id):
 if __name__ == '__main__':
     init_db()
     init_rag_system()
-    app.run(debug=True)
-
+    socketio.run(app, debug=True)
