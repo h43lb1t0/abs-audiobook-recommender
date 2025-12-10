@@ -2,6 +2,8 @@ from flask import Flask, jsonify, send_from_directory, request, Response, render
 import os
 import requests
 import logging
+import json
+from datetime import datetime
 from dotenv import load_dotenv
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -13,7 +15,7 @@ from recommend_lib.rag import init_rag_system
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 from recommend_lib.abs_api import get_abs_users, get_all_items, get_finished_books
-from db import db, User, UserLib
+from db import db, User, UserLib, UserRecommendations
 
 load_dotenv()
 
@@ -257,9 +259,43 @@ def recommend():
     """
     Returns the recommendations
     """
+    refresh = request.args.get('refresh', 'false').lower() == 'true'
+    
     try:
+        if not refresh:
+            # Try to fetch from DB
+            existing_recs = UserRecommendations.query.filter_by(user_id=current_user.id).first()
+            if existing_recs:
+                logger.info(f"Returning cached recommendations for user {current_user.id}")
+                return jsonify({
+                    "recommendations": json.loads(existing_recs.recommendations_json),
+                    "generated_at": existing_recs.created_at
+                })
+        
+        # Calculate new recommendations
         recs = get_recommendations(user_id=current_user.id)
-        return jsonify(recs)
+        
+        # Save to DB (overwrite)
+        current_time = datetime.now().isoformat()
+        
+        existing_recs = UserRecommendations.query.filter_by(user_id=current_user.id).first()
+        if existing_recs:
+            existing_recs.recommendations_json = json.dumps(recs)
+            existing_recs.created_at = current_time
+        else:
+            new_recs = UserRecommendations(
+                user_id=current_user.id,
+                recommendations_json=json.dumps(recs),
+                created_at=current_time
+            )
+            db.session.add(new_recs)
+            
+        db.session.commit()
+        
+        return jsonify({
+            "recommendations": recs, 
+            "generated_at": current_time
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
