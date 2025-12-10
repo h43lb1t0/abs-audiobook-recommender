@@ -1,29 +1,30 @@
-# ABS audiobook Recommender (Audiobookshelf audiobook Recommendations)
+# ABS audiobook Recommender
 
-A personalized recommendation system for your [Audiobookshelf](https://www.audiobookshelf.org/) library. This tool analyzes your listening history and uses a local LLM to suggest the next audiobook you should listen to from your unread collection.
+A personalized recommendation system for your [Audiobookshelf](https://www.audiobookshelf.org/) library. This tool analyzes your listening history and uses advanced local embeddings to find "hidden gems" in your unread collection. It can optionally use a LLM to generate personalized reasoning for every suggestion.
 
 ## Features
 
 -   **Smart Integration**: Connects directly to your Audiobookshelf server to fetch your library and listening progress.
 -   **Intelligent Filtering**:
-    -   Excludes books you've already finished.
+    -   Excludes finished books.
     -   Excludes books currently in progress.
     -   **Series Awareness**: Only recommends the *next* unread book in a series or the first book of a new series.
--   **Advanced Retrieval (RAG)**: Uses a RAG approach to find "hidden gems" in your library that are semantically related to your finished books. It considers:
-    -   Semantic similarity of descriptions.
-    -   Genre and Tag overlap.
-    -   Series connections.
--   **AI-Powered Recommendations**: Uses a local LLM (e.g. `llama-server`) to analyze your taste profile and generate personalized reasons for every recommendation.
--   **Web Interface**: A simple, clean web interface to view recommendations with cover art and AI-generated reasons.
--   **Privacy Focused**: Only sends book titles and authors to your local LLM, keeping data private.
--   **User Authentication**: Secure login system to access personalized recommendations.
+-   **On-Device RAG (Retrieval Augmented Generation)**:
+    -   Uses **local ONNX embeddings** (Jina v3) to understand the semantic meaning of your books.
+    -   No external API or expensive GPU required for embeddings.
+    -   Finds books with similar descriptions, genres, and themes to your favorites.
+-   **(Optional) AI-Powered Recommendations**: 
+    -   Connect a LLM (like `llama-server`) to get personalized, explained reasons for each recommendation.
+    -   If no LLM is provided, the system provides high-quality ranked matches based on similarity scores.
+-   **Collaborative Filtering**: Leverages reading patterns from other users on your server to boost relevant recommendations.
+-   **Web Interface**: A clean, responsive UI to view recommendations.
+-   **Privacy Focused**: All analysis happens locally. Book data is only sent to your local LLM (if configured).
 
 ## Prerequisites
 
 -   **Python 3.13+**
--   **Audiobookshelf Server**: You need a running instance of Audiobookshelf.
--   **Local LLM Server**: You need a local LLM server running (e.g., `llama-server` from `llama.cpp`) that is compatible with the OpenAI API format and supports JSON mode (`response_format`).
--   **ChromaDB Dependencies**: (Implicitly installed via `uv sync`) Requires C++ build tools on some platforms for `chroman-db` dependencies.
+-   **Audiobookshelf Server**
+-   **(Optional) LLM Server**: Required only if you want AI-generated explanations. Any OpenAI-compatible server (like `llama.cpp`'s `llama-server`) works.
 
 ## Installation
 
@@ -34,92 +35,61 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     ```
 
 2.  **Install dependencies:**
-    This project uses [`uv`](https://docs.astral.sh/uv/) for dependency management.
+    This project uses [`uv`](https://docs.astral.sh/uv/) for fast dependency management.
     ```bash
     uv sync
     ```
 
 3.  **Configure Environment Variables:**
-    Create a `.env` file in the root directory and add the following:
+    Create a `.env` file in the root directory:
 
     ```env
     ABS_URL=http://your-audiobookshelf-url
     ABS_TOKEN=your-audiobookshelf-api-token
+    # Optional: Only needed for AI reasons
     LLAMA_SERVER_URL=http://localhost:8080/v1/chat/completions
-    LANGUAGE=<desired-language-code>
-    ABS_LIB=<library-id>
+    # Optional: Language code (default: en)
+    LANGUAGE=en
+    # Optional: Limit to specific library ID
+    ABS_LIB=
     ```
-
-    *   **ABS_URL**: The full URL to your Audiobookshelf server (e.g., `http://192.168.1.100:13378`).
-    *   **ABS_TOKEN**: The root API token for your Audiobookshelf server (found in Settings > Users > Root User).
-    *   **LLAMA_SERVER_URL**: URL of your local LLM server.
-    *   **LANGUAGE**: (Optional) The language code for recommendations (e.g., `de` for German, `en` for English).You can add your own translations in `web_app/recommend_lib/languages` folder and use the filename as the language code.
-    *   **ABS_LIB**: (Optional) The ID of the library you want to use. If not set, all libraries will be used. This is useful if you want to restrict recommendations to a specific library (e.g. Audiobooks). In this way you can still get the audiobook version recommended even if you have finished the ebook version.
 
 ## Usage
 
 1.  **Start the Web App:**
     ```bash
-    python web_app/app.py
+    uv run web_app/app.py
     ```
 
-2.  **Log In & View Recommendations:**
-    Open your browser and go to `http://localhost:5000`.
-
-    **Login Credentials:**
-    *   **Username**: Your Audiobookshelf username.
-    *   **Password**: Your Audiobookshelf username (case-sensitive).
-
-    *Note: The app syncs users from your ABS instance. By default, the password is set to be the same as the username.*
+2.  **View Recommendations:**
+    Open `http://localhost:5000` in your browser.
+    
+    **Login:** Use your Audiobookshelf username. The initial password is the same as your username (you can change it after logging in).
 
 ## Developer Info
 
-### Background Logic & RAG Initialization
--   **RAG System**: The application uses `ChromaDB` as a vector store.
-    -   On startup (`app.py`), `init_rag_system()` is called.
-    -   It indexes all your books by creating embeddings from their Titles, Authors, Genres, Tags, and Descriptions.
-    -   The vector DB is persisted in `rag_db_v2/` to avoid re-indexing on every restart (incremental updates are supported).
--   **Recommendation Logic (`recommender.py`)**:
-    1.  Fetches user's finished books.
-    2.  Calculates top genres/authors.
-    3.  Uses finished books as "seeds" to query the RAG system.
-    4.  Scores unread books based on RAG similarity + User Preference logic.
-    5.  Passes the top ~50 candidates to the LLM with a highly specific system prompt found in `web_app/recommend_lib/languages/system/`.
-
-### Mocks and Testing
--   **Prompt Debugging**: The last generated prompt is always saved to `prompt_debug.txt` in the root directory. This is useful for debugging what context the LLM is actually seeing.
-
-
-## Project Structure
-
-```
-ABS_vorschlaege/
-├── .env                    # Your environment variables (not in git)
-├── pyproject.toml          # Project metadata and dependencies
-├── README.md
-└── web_app/
-    ├── app.py              # Flask web server entry point
-    ├── db.py               # Database connection and models
-    ├── recommend_lib/      # Core recommendation logic
-    │   ├── abs_api.py      # Audiobookshelf API client
-    │   ├── llm.py          # Local LLM API integration
-    │   └── recommender.py  # Main recommendation orchestration
-    ├── static/             # CSS and other static assets
-    └── templates/          # HTML templates
-```
+### Architecture
+-   **RAG System (`web_app/recommend_lib/rag.py`)**:
+    -   Automatically downloads and caches the quantized Jina v3 ONNX model (~130MB) for fast, low-memory embedding.
+    -   Vector data is persisted in `rag_db_v2/`.
+-   **Recommendation Logic**:
+    -   Unread books are ranked by their semantic similarity to your finished books (Mean Vector profile).
+    -   Scores are boosted by:
+        -   **User Preferences**: Top authors and genres.
+        -   **Collaborative Signals**: High ratings from similar users.
 
 ## Roadmap
 
-- [x] Support for more languages (currently the prompt is in German only) - *Added System Prompts*
 - [x] Choose what ABS library to use (multiple libraries?)
 - [x] Multi-user support
 - [x] Login system
 - [x] Advanced RAG Integration
+- [ ] Scoring system for your audiobooks that will also be used for recommendations 
 - [ ] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the LLM
 - [ ] Docker containerization for easier deployment
 - [ ] Enhanced UI/UX design
 - [ ] ~~Additional filtering options (e.g., by genre, length, narrator)~~
-- [ ] ~~Support for other AI models/providers~~ 
+- [x] Support for other AI models/providers
 - [ ] Mobile-friendly design
 
 (Strikethrough items are not actively planned but may be revisited in the future.)
@@ -130,6 +100,3 @@ Contributions are welcome! Please open issues or submit pull requests (opening a
 
 ## License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
- 
-
