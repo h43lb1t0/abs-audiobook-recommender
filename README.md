@@ -83,6 +83,8 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
         -   **User Preferences**: Top authors and genres.
         -   **Collaborative Signals**: High ratings from similar users.
 
+See [RECOMMENDATION_ALGO.md](RECOMMENDATION_ALGO.md) for a deep dive into the algorithm.
+
 ## Roadmap
 
 - [x] Choose what ABS library to use (multiple libraries?)
