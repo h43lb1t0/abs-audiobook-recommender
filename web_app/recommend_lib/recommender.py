@@ -183,25 +183,26 @@ def rank_candidates(
     if negative_ids:
         negative_embeddings = rag.get_embeddings(negative_ids)
         if negative_embeddings:
-            # Back to mean vector for negative
-            negative_vector = calculate_mean_vector(negative_embeddings)
-            logger.info(f"Phase 2: Penalizing similarity to {len(negative_ids)} negatively-rated books (single mean vector)")
+            logger.info(f"Phase 2: Penalizing similarity to {len(negative_ids)} negatively-rated books (individual embeddings)")
             
-            # Find books similar to disliked content
-            disliked_similar = rag.retrieve_by_embedding(negative_vector, n_results=100)
-            
-            for idx, (sid, dist) in enumerate(disliked_similar):
-                # Penalty based on similarity
-                # If very similar (low distance), high penalty.
+            # Use individual vectors instead of mean to capture specific dislikes
+            for i, neg_vector in enumerate(negative_embeddings):
+                # Find books similar to this specific disliked book
+                # Reduced n_results to 50 to avoid performance hit from multiple queries
+                disliked_similar = rag.retrieve_by_embedding(neg_vector, n_results=50)
                 
-                safe_dist = max(0.0, dist)
-                similarity = 1.0 - (safe_dist / 2.0)
-                
-                if similarity > 0:
-                    penalty = similarity * 100.0 * 1.5
-                    candidate_scores[sid] -= penalty
+                for idx, (sid, dist) in enumerate(disliked_similar):
+                    # Penalty based on similarity
+                    # If very similar (low distance), high penalty.
+                    
+                    safe_dist = max(0.0, dist)
+                    similarity = 1.0 - (safe_dist / 2.0)
+                    
+                    if similarity > 0:
+                        penalty = similarity * 100.0 * 1.5
+                        candidate_scores[sid] -= penalty
 
-            logger.info(f"Applied penalties to {len(disliked_similar)} candidates")
+            logger.info("Applied penalties based on negative ratings")
 
 
     ranked_books = []
