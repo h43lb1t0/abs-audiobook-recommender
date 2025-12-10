@@ -1,21 +1,12 @@
 import logging
-
 from dotenv import load_dotenv
-
 from typing import List, Dict, Tuple, Set, Optional
-
 import json
 import os
-
 from collections import Counter
-
-
 from recommend_lib.abs_api import get_all_items, get_finished_books
-
 from recommend_lib.llm import generate_book_recommendations
-
 from recommend_lib.rag import get_rag_system
-
 from sklearn.cluster import KMeans
 
 
@@ -427,16 +418,24 @@ def cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
     return dot_product / (norm_a * norm_b)
 
 
+def calculate_max_cluster_similarity(clusters_a: List[List[float]], clusters_b: List[List[float]]) -> float:
+    """
+    Calculates the maximum similarity between any pair of clusters from two sets.
+    """
+    max_sim = 0.0
+    for vec_a in clusters_a:
+        for vec_b in clusters_b:
+            sim = cosine_similarity(vec_a, vec_b)
+            if sim > max_sim:
+                max_sim = sim
+    return max_sim
+
+
 def get_collaborative_recommendations(
-
-    current_user_mean_vector: List[float], 
-
+    current_user_clusters: List[List[float]], 
     current_user_id: str, 
-
     items_map: Dict,
-
     rag_system
-
 ) -> Tuple[List[Dict], str, float]:
 
     """
@@ -498,10 +497,14 @@ def get_collaborative_recommendations(
             continue
             
 
-        user_mean_vector = calculate_mean_vector(embeddings)
+        if not embeddings:
+            continue
+            
+
+        user_cluster_vectors = calculate_cluster_vectors(embeddings, max_clusters=5)
         
 
-        sim = cosine_similarity(current_user_mean_vector, user_mean_vector)
+        sim = calculate_max_cluster_similarity(current_user_clusters, user_cluster_vectors)
         
 
         # logger.debug(f"User {username} similarity: {sim}")
@@ -513,7 +516,7 @@ def get_collaborative_recommendations(
 
             most_similar_user = user
 
-            most_similar_mean_vector = user_mean_vector
+            most_similar_mean_vector = user_cluster_vectors # Storing clusters now
             
 
     if most_similar_user and best_similarity > 0.5: # Threshold for "similar enough"
@@ -521,9 +524,16 @@ def get_collaborative_recommendations(
         logger.info(f"Most similar user found: {most_similar_user.get('username')} with score {best_similarity}")
         
 
-        # Get recommendations for this similar user using their mean vector
-
-        similar_ids = rag_system.retrieve_by_embedding(most_similar_mean_vector, n_results=50)
+        # Get recommendations for this similar user using their *clusters*
+        
+        similar_ids_set = set()
+        
+        # Iterate over their clusters to get books
+        for vector in most_similar_mean_vector:
+             ids = rag_system.retrieve_by_embedding(vector, n_results=20)
+             similar_ids_set.update(ids)
+             
+        similar_ids = list(similar_ids_set)
         
 
         # Convert IDs to book objects
@@ -727,12 +737,13 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
 
     if current_embeddings:
 
-        current_mean_vector = calculate_mean_vector(current_embeddings)
+        # Calculate clusters for me
+        current_user_clusters = calculate_cluster_vectors(current_embeddings, max_clusters=5)
         
 
         collab_recs, similar_user, similarity_score = get_collaborative_recommendations(
 
-            current_mean_vector, 
+            current_user_clusters, 
 
             user_id if user_id else "me", # Approximate ID logic
 
