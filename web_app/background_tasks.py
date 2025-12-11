@@ -66,6 +66,8 @@ def scheduled_user_activity_check(app):
             
             users = User.query.all()
             
+            check_time = datetime.now().isoformat()
+            
             for user in users:
                 user_id = user.id
                 should_generate = False
@@ -102,17 +104,19 @@ def scheduled_user_activity_check(app):
                     try:
                         recs = get_recommendations(user_id=user_id)
                         
-                        current_time = datetime.now().isoformat()
+                        # current_time = datetime.now().isoformat()
+                        # Use check_time from before loop to ensure consistency
+                        
                         existing_recs = UserRecommendations.query.filter_by(user_id=user_id).first()
                         
                         if existing_recs:
                             existing_recs.recommendations_json = json.dumps(recs)
-                            existing_recs.created_at = current_time
+                            existing_recs.created_at = check_time
                         else:
                             new_recs = UserRecommendations(
                                 user_id=user_id,
                                 recommendations_json=json.dumps(recs),
-                                created_at=current_time
+                                created_at=check_time
                             )
                             db.session.add(new_recs)
                         
