@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import Integer, String, ForeignKey
+from sqlalchemy import Integer, String, ForeignKey, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from flask_login import UserMixin
 
@@ -18,15 +18,28 @@ class User(UserMixin, db.Model):
     password: Mapped[str] = mapped_column(String(255))
 
 class UserLib(db.Model):
+    """
+    User library model.
+
+    This contains all the books that a user has either finished or is currently reading and their status.
+    For finished books, it also contains the rating.
+    """
     __tablename__ = "user_lib"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.id"))
     book_id: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(255)) # finished, reading
-    rating: Mapped[int] = mapped_column(Integer, nullable=True)  # 1-5 stars, nullable for unrated books
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5 stars, nullable for unrated books
 
-
+    __table_args__ = (
+        CheckConstraint("(rating >= 1 AND rating <= 5) OR (rating IS NULL)", name="valid_rating"),
+        CheckConstraint("status IN ('finished', 'reading')", name="valid_status"),
+        CheckConstraint(
+            "(status = 'finished') OR (rating IS NULL)",
+            name="valid_finished_rating"
+        )
+    )
 
 
 class UserRecommendations(db.Model):

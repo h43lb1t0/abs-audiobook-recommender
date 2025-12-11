@@ -166,13 +166,8 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
     except requests.exceptions.RequestException as e:
         logger.error(f"Error fetching user data: {e}")
         return set(), set(), set()
-
-    # The user object structure is the same for /api/me and /api/users/{id}
-    # However, /api/users/{id} might return the user object directly or wrapped.
-    # Based on get_abs_users, /api/users returns { users: [...] }
-    # Usually /api/users/{id} returns the user object directly.
     
-    # Let's assume it returns the user object directly which contains mediaProgress.
+    
     media_progress = user_data.get('mediaProgress', [])
     
     finished_ids = set()

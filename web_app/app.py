@@ -189,6 +189,7 @@ def get_listening_history():
         items_map, _ = get_all_items()
         finished_ids, _, _ = get_finished_books(items_map, user_id=current_user.id)
         
+        
         # Get user's ratings from database
         user_ratings = UserLib.query.filter_by(user_id=current_user.id).all()
         ratings_map = {r.book_id: r.rating for r in user_ratings}
@@ -252,11 +253,9 @@ def rate_book():
         
         if existing:
             existing.rating = rating
+            db.session.commit()
         else:
-            new_entry = UserLib(user_id=current_user.id, book_id=book_id, rating=rating)
-            db.session.add(new_entry)
-        
-        db.session.commit()
+            return jsonify({"error": "Book not found in library"}), 404
         return jsonify({"success": True, "book_id": book_id, "rating": rating})
     except Exception as e:
         logger.error(f"Error saving rating: {e}")
