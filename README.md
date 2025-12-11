@@ -92,7 +92,7 @@ See [RECOMMENDATION_ALGO.md](RECOMMENDATION_ALGO.md) for a deep dive into the al
 - [x] Login system
 - [x] Advanced RAG Integration
 - [x] Scoring system for your audiobooks (Listening History with 1-5 star ratings)
-- [ ] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the LLM
+- [x] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the LLM
 - [ ] Docker containerization for easier deployment
 - [ ] Enhanced UI/UX design
 - [ ] ~~Additional filtering options (e.g., by genre, length, narrator)~~
@@ -100,6 +100,34 @@ See [RECOMMENDATION_ALGO.md](RECOMMENDATION_ALGO.md) for a deep dive into the al
 - [ ] Mobile-friendly design
 
 (Strikethrough items are not actively planned but may be revisited in the future.)
+
+
+## Background Tasks
+
+The application runs background tasks to keep your recommendations fresh without manual intervention:
+
+1.  **Library Indexing**:
+    -   **Frequency**: Every 6 hours (default).
+    -   **Action**: Scans your Audiobookshelf library for new or updated books and updates the local RAG index to ensure new books are discoverable.
+
+2.  **Recommendation Updates**:
+    -   **Frequency**: Checks every 5 minutes (default).
+    -   **Action**: 
+        -   If new books were found during indexing, it regenerates recommendations for all users.
+        -   If a user has recently rated or finished a book, it regenerates recommendations specific to that user.
+        -   Updates are pushed to the web interface in real-time via WebSockets.
+
+### Configuration
+
+You can adjust the frequency of these tasks in `web_app/defaults.py`:
+
+```python
+BACKGROUND_TASKS = {
+    "CHECK_NEW_BOOKS_INTERVAL": 6, # Hours between library scans
+    "CREATE_RECOMMENDATIONS_INTERVAL": 5, # Minutes between activity checks
+}
+```
+
 
 
 ## Contributing
