@@ -54,5 +54,7 @@ class BackgroundCheckLog(db.Model):
     __tablename__ = "background_check_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    checked_at: Mapped[str] = mapped_column(String(255)) # ISO8601 string
+    checked_new_books_at: Mapped[str] = mapped_column(String(255)) # ISO8601 string
+    created_recommendations: Mapped[bool] = mapped_column(Boolean, default=False)
+
 

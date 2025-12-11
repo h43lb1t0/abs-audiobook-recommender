@@ -417,7 +417,7 @@ def scheduled_indexing():
                     db.session.query(BackgroundCheckLog).delete()
                     
                     new_log = BackgroundCheckLog(
-                        checked_at=current_time
+                        checked_new_books_at=current_time
                     )
                     db.session.add(new_log)
                     db.session.commit()
