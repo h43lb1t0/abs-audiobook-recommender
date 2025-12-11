@@ -16,7 +16,7 @@ from flask_apscheduler import APScheduler
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 from recommend_lib.abs_api import get_abs_users, get_all_items, get_finished_books
-from db import db, User, UserLib, UserRecommendations
+from db import db, User, UserLib, UserRecommendations, BackgroundCheckLog
 
 load_dotenv()
 
@@ -397,6 +397,8 @@ def proxy_cover(item_id):
                
     return Response(resp.content, resp.status_code, headers)
 
+
+
 def scheduled_indexing():
     """
     Scheduled task to index the library
@@ -406,8 +408,26 @@ def scheduled_indexing():
         try:
              items_map, _ = get_all_items()
              rag = get_rag_system()
-             rag.index_library(items_map)
-             logger.info("Scheduled library indexing complete.")
+             new_count = rag.index_library(items_map)
+             
+             # Log the check
+             current_time = datetime.now().isoformat()
+             
+             # Delete previous logs to keep only the latest
+             try:
+                 db.session.query(BackgroundCheckLog).delete()
+                 
+                 new_log = BackgroundCheckLog(
+                     checked_at=current_time,
+                     new_books_found=(new_count > 0)
+                 )
+                 db.session.add(new_log)
+                 db.session.commit()
+                 logger.info(f"Scheduled library indexing complete. New items: {new_count}. Logged to DB.")
+             except Exception as e:
+                 logger.error(f"Error logging background check: {e}")
+                 db.session.rollback()
+
         except Exception as e:
              logger.error(f"Error in scheduled indexing: {e}")
 

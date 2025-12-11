@@ -22,6 +22,7 @@ class UserLib(db.Model):
 
 
 
+
 class UserRecommendations(db.Model):
     __tablename__ = "user_recommendations"
 
@@ -29,4 +30,11 @@ class UserRecommendations(db.Model):
     user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.id"))
     recommendations_json: Mapped[str] = mapped_column(db.Text)
     created_at: Mapped[str] = mapped_column(String(255)) # ISO8601 string
+
+class BackgroundCheckLog(db.Model):
+    __tablename__ = "background_check_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    checked_at: Mapped[str] = mapped_column(String(255)) # ISO8601 string
+    new_books_found: Mapped[bool] = mapped_column(db.Boolean)
 
