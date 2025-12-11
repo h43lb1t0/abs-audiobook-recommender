@@ -42,5 +42,4 @@ class BackgroundCheckLog(db.Model):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     checked_at: Mapped[str] = mapped_column(String(255)) # ISO8601 string
-    new_books_found: Mapped[bool] = mapped_column(db.Boolean)
 

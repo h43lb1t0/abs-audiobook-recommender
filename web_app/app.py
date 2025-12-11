@@ -413,20 +413,19 @@ def scheduled_indexing():
              # Log the check
              current_time = datetime.now().isoformat()
              
-             # Delete previous logs to keep only the latest
-             try:
-                 db.session.query(BackgroundCheckLog).delete()
-                 
-                 new_log = BackgroundCheckLog(
-                     checked_at=current_time,
-                     new_books_found=(new_count > 0)
-                 )
-                 db.session.add(new_log)
-                 db.session.commit()
-                 logger.info(f"Scheduled library indexing complete. New items: {new_count}. Logged to DB.")
-             except Exception as e:
-                 logger.error(f"Error logging background check: {e}")
-                 db.session.rollback()
+             if new_count > 0:
+                try:
+                    db.session.query(BackgroundCheckLog).delete()
+                    
+                    new_log = BackgroundCheckLog(
+                        checked_at=current_time
+                    )
+                    db.session.add(new_log)
+                    db.session.commit()
+                    logger.info(f"Scheduled library indexing complete. New items: {new_count}. Logged to DB.")
+                except Exception as e:
+                    logger.error(f"Error logging background check: {e}")
+                    db.session.rollback()
 
         except Exception as e:
              logger.error(f"Error in scheduled indexing: {e}")
