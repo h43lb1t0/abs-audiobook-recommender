@@ -1,11 +1,12 @@
-import logging
 import json
+import logging
 from datetime import datetime, timedelta
-from db import db, BackgroundCheckLog, User, UserLib, UserRecommendations
+
+from db import BackgroundCheckLog, User, UserLib, UserRecommendations, db
+from defaults import BACKGROUND_TASKS
 from recommend_lib.abs_api import get_all_items, get_finished_books
 from recommend_lib.rag import get_rag_system
 from recommend_lib.recommender import get_recommendations
-from defaults import BACKGROUND_TASKS
 
 logger = logging.getLogger(__name__)
 

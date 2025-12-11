@@ -1,26 +1,26 @@
-from flask import Flask, jsonify, send_from_directory, request, Response, render_template, redirect, url_for, flash
-import os
-import requests
-import logging
 import json
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
-from sqlalchemy import text, inspect
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask_socketio import SocketIO, emit
+import logging
+import os
+from datetime import datetime
 
-from recommend_lib.recommender import get_recommendations
-from recommend_lib.rag import init_rag_system, get_rag_system
-from flask_apscheduler import APScheduler
+import requests
 from background_tasks import scheduled_indexing, scheduled_user_activity_check
-
-
+from db import User, UserLib, UserRecommendations, db
 from defaults import *
-from recommend_lib.abs_api import get_abs_users, get_all_items, get_finished_books
-from db import db, User, UserLib, UserRecommendations, BackgroundCheckLog
-
+from dotenv import load_dotenv
+from flask import (Flask, Response, flash, jsonify, redirect, render_template,
+                   request, url_for)
+from flask_apscheduler import APScheduler
+from flask_login import (LoginManager, current_user, login_required,
+                         login_user, logout_user)
+from flask_socketio import SocketIO, emit
 from logger_conf import setup_logging
+from recommend_lib.abs_api import (get_abs_users, get_all_items,
+                                   get_finished_books)
+from recommend_lib.rag import get_rag_system, init_rag_system
+from recommend_lib.recommender import get_recommendations
+from sqlalchemy import inspect, text
+from werkzeug.security import check_password_hash, generate_password_hash
 
 setup_logging()
 logger = logging.getLogger(__name__)

@@ -1,12 +1,12 @@
-import os
-import requests
 import json
 import logging
-from dotenv import load_dotenv
+import os
 import re
-from typing import Tuple
 from datetime import datetime
+from typing import Tuple
 
+import requests
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +137,8 @@ def get_all_items() -> Tuple[dict, dict]:
 
 
 
-from db import db, UserLib
+from db import UserLib, db
+
 
 def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, set]:
     """

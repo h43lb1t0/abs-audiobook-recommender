@@ -4,14 +4,14 @@ import os
 from collections import Counter
 from typing import Dict, List, Set, Tuple
 
-from db import UserLib, User
+from db import User, UserLib
+from defaults import *
 from dotenv import load_dotenv
-from recommend_lib.abs_api import get_abs_users, get_all_items, get_finished_books
+from recommend_lib.abs_api import (get_abs_users, get_all_items,
+                                   get_finished_books)
 from recommend_lib.llm import generate_book_recommendations
 from recommend_lib.rag import get_rag_system
 from sklearn.cluster import KMeans
-from defaults import *
-
 
 logger = logging.getLogger(__name__)
 

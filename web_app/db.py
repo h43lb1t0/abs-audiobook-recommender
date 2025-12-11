@@ -1,7 +1,7 @@
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import Integer, String, ForeignKey, CheckConstraint, Boolean
-from sqlalchemy.orm import Mapped, mapped_column
 from flask_login import UserMixin
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 db = SQLAlchemy()
 
