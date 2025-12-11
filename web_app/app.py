@@ -15,12 +15,15 @@ from recommend_lib.rag import init_rag_system, get_rag_system
 from flask_apscheduler import APScheduler
 from background_tasks import scheduled_indexing, scheduled_user_activity_check
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
 from defaults import *
 from recommend_lib.abs_api import get_abs_users, get_all_items, get_finished_books
 from db import db, User, UserLib, UserRecommendations, BackgroundCheckLog
 
+from logger_conf import setup_logging
+
+setup_logging()
+logger = logging.getLogger(__name__)
 load_dotenv()
 
 app = Flask(__name__)

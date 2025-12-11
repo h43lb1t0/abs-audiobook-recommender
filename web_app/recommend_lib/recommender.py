@@ -13,8 +13,6 @@ from sklearn.cluster import KMeans
 from defaults import *
 
 
-logging.basicConfig(level=logging.INFO)
-
 logger = logging.getLogger(__name__)
 
 load_dotenv()
