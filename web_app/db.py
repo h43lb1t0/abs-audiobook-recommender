@@ -6,6 +6,11 @@ from flask_login import UserMixin
 db = SQLAlchemy()
 
 class User(UserMixin, db.Model):
+    """
+    User model for authentication and authorization.
+
+    The id is the user's id from the ABS API.
+    """
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
@@ -18,6 +23,7 @@ class UserLib(db.Model):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.id"))
     book_id: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(255)) # finished, reading
     rating: Mapped[int] = mapped_column(Integer, nullable=True)  # 1-5 stars, nullable for unrated books
 
 

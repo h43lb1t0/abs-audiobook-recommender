@@ -432,7 +432,7 @@ def scheduled_indexing():
              logger.error(f"Error in scheduled indexing: {e}")
 
 # Schedule task to run every 6 hours
-scheduler.add_job(id='scheduled_indexing', func=scheduled_indexing, trigger='interval', hours=6)
+scheduler.add_job(id='scheduled_indexing', func=scheduled_indexing, trigger='interval', minutes=2)
 
 @app.route('/api/admin/force-sync', methods=['POST'])
 @login_required

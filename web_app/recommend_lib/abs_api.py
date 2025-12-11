@@ -136,9 +136,13 @@ def get_all_items() -> Tuple[dict, dict]:
 
 
 
+from db import db, UserLib
+
 def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, set]:
     """
     Returns the finished books from ABS (books count as finished if they are finished or if they are 97% read)
+    
+    Also saves/updates the progress to the local UserLib table.
 
     Args:
         items_map (dict): The items map
@@ -175,6 +179,35 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
     in_progress_ids = set()
 
     finished_keys = set()
+    
+    # Identify the user ID to save to DB
+    current_user_id = user_id
+    if not current_user_id:
+        current_user_id = user_data.get('id')
+
+    # Prepare for DB update if we have a user ID and are in an app context
+    should_sync_db = False
+    
+    if current_user_id:
+        try:
+             # Check if we are in an app context (db.session works)
+             from flask import current_app
+             if current_app:
+                 should_sync_db = True
+        except ImportError:
+             pass
+        except RuntimeError:
+             # working outside of application context
+             pass
+
+    user_lib_map = {}
+    if should_sync_db:
+        try:
+             existing_entries = UserLib.query.filter_by(user_id=current_user_id).all()
+             user_lib_map = {entry.book_id: entry for entry in existing_entries}
+        except Exception as e:
+             logger.error(f"Error fetching UserLib entries for syncing: {e}")
+             should_sync_db = False
 
     for mp in media_progress:
         item_id = mp.get('libraryItemId')
@@ -183,15 +216,46 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
         progress = mp.get('progress', 0.0)
 
         currentTime = mp.get('currentTime', 0.0)
+        
+        status = None
 
         if is_finished or progress >= 0.97:
             finished_ids.add(item_id)
+            status = 'finished'
             if item_id in items_map:
                 book = items_map[item_id]
                 finished_keys.add((book['title'], book['author']))
                 
         elif progress > 0 or currentTime > 0:
             in_progress_ids.add(item_id)
+            status = 'reading'
+
+        # Sync to DB
+        if should_sync_db and status:
+            try:
+                if item_id in user_lib_map:
+                    entry = user_lib_map[item_id]
+                    if entry.status != status:
+                        entry.status = status
+                else:
+                    new_entry = UserLib(
+                        user_id=current_user_id,
+                        book_id=item_id,
+                        status=status,
+                        rating=None 
+                    )
+                    db.session.add(new_entry)
+                    user_lib_map[item_id] = new_entry # Update local map
+            except Exception as e:
+                 logger.error(f"Error updating UserLib for item {item_id}: {e}")
+
+    if should_sync_db:
+        try:
+            db.session.commit()
+            logger.info(f"Synced UserLib progress for user {current_user_id}")
+        except Exception as e:
+            logger.error(f"Error committing UserLib changes: {e}")
+            db.session.rollback()
 
     return finished_ids, in_progress_ids, finished_keys
 
