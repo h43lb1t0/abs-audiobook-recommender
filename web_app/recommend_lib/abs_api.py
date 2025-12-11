@@ -205,6 +205,9 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
              logger.error(f"Error fetching UserLib entries for syncing: {e}")
              should_sync_db = False
 
+    # First pass: Determine the final status for each item, handling duplicates
+    final_status_map = {} # item_id -> status
+
     for mp in media_progress:
         item_id = mp.get('libraryItemId')
 
@@ -216,6 +219,7 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
         status = None
 
         if is_finished or progress >= 0.97:
+            # Also add to return sets
             finished_ids.add(item_id)
             status = 'finished'
             if item_id in items_map:
@@ -226,12 +230,22 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
             in_progress_ids.add(item_id)
             status = 'reading'
 
-        # Sync to DB
-        if should_sync_db and status:
+        if status:
+            if item_id in final_status_map:
+                # Conflict resolution: finished > reading
+                if final_status_map[item_id] == 'reading' and status == 'finished':
+                    final_status_map[item_id] = 'finished'
+            else:
+                final_status_map[item_id] = status
+
+    # Sync to DB
+    if should_sync_db:
+        for item_id, status in final_status_map.items():
             try:
                 if item_id in user_lib_map:
                     entry = user_lib_map[item_id]
                     if entry.status != status:
+                        logger.debug(f"Updating status for item {item_id} from {entry.status} to {status}")
                         entry.status = status
                         entry.updated_at = datetime.now().isoformat()
                 else:
