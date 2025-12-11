@@ -26,5 +26,8 @@ items_resp.json
 .cache/
 web_app/.cache/
 
+# Logs
+*.log
+
 
 
