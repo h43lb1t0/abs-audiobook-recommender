@@ -15,6 +15,7 @@ from flask_apscheduler import APScheduler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+from defaults import *
 from recommend_lib.abs_api import get_abs_users, get_all_items, get_finished_books
 from db import db, User, UserLib, UserRecommendations, BackgroundCheckLog
 
@@ -430,7 +431,12 @@ def scheduled_indexing():
              logger.error(f"Error in scheduled indexing: {e}")
 
 # Schedule task to run every 6 hours
-scheduler.add_job(id='scheduled_indexing', func=scheduled_indexing, trigger='interval', minutes=2)
+scheduler.add_job(
+    id='scheduled_indexing', 
+    func=scheduled_indexing, 
+    trigger='interval', 
+    minutes=BACKGROUND_TASKS['CHECK_NEW_BOOKS_INTERVAL']
+)
 
 @app.route('/api/admin/force-sync', methods=['POST'])
 @login_required
