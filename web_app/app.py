@@ -3,8 +3,9 @@ import os
 import requests
 import logging
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from sqlalchemy import text, inspect
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_socketio import SocketIO, emit
@@ -69,7 +70,24 @@ def init_db():
             db.session.commit()
             logger.info("Root user created.")
             
+        check_and_migrate_db()
         sync_abs_users()
+
+def check_and_migrate_db():
+    """
+    Checks if the database needs migration and performs it.
+    """
+    with app.app_context():
+        inspector = inspect(db.engine)
+        columns = [col['name'] for col in inspector.get_columns('user_lib')]
+        
+        if 'updated_at' not in columns:
+            logger.info("Migrating database: Adding updated_at column to user_lib table")
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE user_lib ADD COLUMN updated_at VARCHAR(255)"))
+                conn.commit()
+            logger.info("Migration complete.")
+
 
 def sync_abs_users():
     """Syncs users from ABS to the local database."""
@@ -254,6 +272,7 @@ def rate_book():
         
         if existing:
             existing.rating = rating
+            existing.updated_at = datetime.now().isoformat()
             db.session.commit()
         else:
             return jsonify({"error": "Book not found in library"}), 404
@@ -430,12 +449,115 @@ def scheduled_indexing():
         except Exception as e:
              logger.error(f"Error in scheduled indexing: {e}")
 
-# Schedule task to run every 6 hours
+def scheduled_user_activity_check():
+    """
+    Background task to check for new books and user activity to trigger recommendations.
+    """
+    with app.app_context():
+        logger.debug("Starting background check task...")
+        try:
+            # 1. Check for new books being added
+            last_check_log = BackgroundCheckLog.query.order_by(BackgroundCheckLog.id.desc()).first()
+            
+            new_books_trigger = False
+            
+            if last_check_log:
+                # If checked_new_books_at is older than interval AND created_recommendations is False
+                if last_check_log.checked_new_books_at:
+                    checked_at = datetime.fromisoformat(last_check_log.checked_new_books_at)                
+                    time_threshold = datetime.now() - timedelta(minutes=BACKGROUND_TASKS['CHECK_NEW_BOOKS_INTERVAL'])
+                    
+                    if checked_at < time_threshold and not last_check_log.created_recommendations:
+                        logger.info("Found pending new books check. Triggering global recommendation update.")
+                        new_books_trigger = True
+                        
+            
+            users = User.query.all()
+            
+            for user in users:
+                user_id = user.id
+                should_generate = False
+                
+                # Global trigger (New books added)
+                if new_books_trigger:
+                    should_generate = True
+                
+                if not should_generate:
+                    # 2. & 3. Check for user activity (finished/reading/rated)
+                    
+                    # Get last recommendation time
+                    last_rec = UserRecommendations.query.filter_by(user_id=user_id).first()
+                    last_rec_time = datetime.min
+                    
+                    if last_rec and last_rec.created_at:
+                        try:
+                            last_rec_time = datetime.fromisoformat(last_rec.created_at)
+                        except ValueError:
+                            pass
+
+                    # Sync User Lib to get latest changes (finished/reading)
+                    # Note: get_finished_books updates the DB with 'updated_at' if status changes
+                    items_map, _ = get_all_items() # We need items_map
+                    get_finished_books(items_map, user_id=user_id)
+                    
+                    # Check for recent updates in UserLib
+                    # We check for any entry for this user where updated_at > last_rec_time
+                    
+                    recent_changes = UserLib.query.filter(
+                        UserLib.user_id == user_id,
+                        UserLib.updated_at > last_rec_time.isoformat()
+                    ).first()
+                    
+                    if recent_changes:
+                        logger.info(f"User {user.username} has recent activity since {last_rec_time}. triggering recommendations.")
+                        should_generate = True
+
+                if should_generate:
+                    logger.info(f"Generating background recommendations for {user.username}")
+                    try:
+                        recs = get_recommendations(user_id=user_id)
+                        
+                        current_time = datetime.now().isoformat()
+                        existing_recs = UserRecommendations.query.filter_by(user_id=user_id).first()
+                        
+                        if existing_recs:
+                            existing_recs.recommendations_json = json.dumps(recs)
+                            existing_recs.created_at = current_time
+                        else:
+                            new_recs = UserRecommendations(
+                                user_id=user_id,
+                                recommendations_json=json.dumps(recs),
+                                created_at=current_time
+                            )
+                            db.session.add(new_recs)
+                        
+                        db.session.commit()
+                        logger.info(f"Recommendations updated for {user.username}")
+                        
+                    except Exception as e:
+                        logger.error(f"Error generating recommendations for {user.username}: {e}")
+            
+            # Update the log if we processed the global trigger
+            if new_books_trigger and last_check_log:
+                last_check_log.created_recommendations = True
+                db.session.commit()
+                
+        except Exception as e:
+            logger.error(f"Error in background check task: {e}")
+
+
+scheduler.add_job(
+    id='scheduled_user_activity_check',
+    func=scheduled_user_activity_check,
+    trigger='interval',
+    minutes=BACKGROUND_TASKS['CREATE_RECOMMENDATIONS_INTERVAL']
+)
+
 scheduler.add_job(
     id='scheduled_indexing', 
     func=scheduled_indexing, 
     trigger='interval', 
-    minutes=BACKGROUND_TASKS['CHECK_NEW_BOOKS_INTERVAL']
+    hours=BACKGROUND_TASKS['CHECK_NEW_BOOKS_INTERVAL']
 )
 
 @app.route('/api/admin/force-sync', methods=['POST'])
@@ -446,12 +568,7 @@ def force_sync():
     """
     if current_user.id != 'root':
         return jsonify({"error": "Unauthorized"}), 403
-        
-    # Run synchronously for immediate feedback, or trigger background job
-    # For now, let's run it essentially synchronously or fire-and-forget but return success
     
-    # We can just call the function directly
-    # Note: This might timeout if library is huge, but for now it's fine
     try:
         logger.info("Force sync triggered by root user.")
         items_map, _ = get_all_items()

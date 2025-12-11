@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import Integer, String, ForeignKey, CheckConstraint
+from sqlalchemy import Integer, String, ForeignKey, CheckConstraint, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 from flask_login import UserMixin
 
@@ -40,6 +40,8 @@ class UserLib(db.Model):
             name="valid_finished_rating"
         )
     )
+
+    updated_at: Mapped[str | None] = mapped_column(String(255), nullable=True) # ISO8601 string
 
 
 class UserRecommendations(db.Model):

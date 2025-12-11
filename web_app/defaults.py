@@ -4,8 +4,8 @@ This file contains default values for the application.
 
 # Background tasks
 BACKGROUND_TASKS = {
-    "CHECK_NEW_BOOKS_INTERVAL": 5, # in minutes; How often to check for new books
-    "CREATE_RECOMMENDATIONS_INTERVAL": 2, # in minutes; How often to create recommendations
+    "CHECK_NEW_BOOKS_INTERVAL": 6, # in hours; How often to check for new books
+    "CREATE_RECOMMENDATIONS_INTERVAL": 5, # in minutes; How often to create recommendations
 }
 
 

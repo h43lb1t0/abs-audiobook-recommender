@@ -4,7 +4,7 @@ import os
 from collections import Counter
 from typing import Dict, List, Set, Tuple
 
-from db import UserLib
+from db import UserLib, User
 from dotenv import load_dotenv
 from recommend_lib.abs_api import get_abs_users, get_all_items, get_finished_books
 from recommend_lib.llm import generate_book_recommendations
@@ -504,7 +504,17 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
         List[Dict[str, str]]: The recommendations
     """
 
-    logger.info(f"Getting recommendations for user_id: {user_id}")
+    if user_id is None:
+        raise ValueError("User ID is required")
+        return []
+
+    user = User.query.get(user_id)
+
+    if not user:
+        raise ValueError("User not found")
+        return []
+
+    logger.info(f"Getting recommendations for user: {user.username}")
 
     items_map, series_counts = get_all_items()
     

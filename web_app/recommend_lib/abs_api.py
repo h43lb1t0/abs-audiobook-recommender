@@ -5,6 +5,7 @@ import logging
 from dotenv import load_dotenv
 import re
 from typing import Tuple
+from datetime import datetime
 
 
 logger = logging.getLogger(__name__)
@@ -232,12 +233,14 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
                     entry = user_lib_map[item_id]
                     if entry.status != status:
                         entry.status = status
+                        entry.updated_at = datetime.now().isoformat()
                 else:
                     new_entry = UserLib(
                         user_id=current_user_id,
                         book_id=item_id,
                         status=status,
-                        rating=None 
+                        rating=None,
+                        updated_at=datetime.now().isoformat()
                     )
                     db.session.add(new_entry)
                     user_lib_map[item_id] = new_entry # Update local map
