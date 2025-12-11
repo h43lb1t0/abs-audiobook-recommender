@@ -28,7 +28,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key") # Needed for sessions
-socketio = SocketIO(app)
+socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
 
 ABS_URL = os.getenv("ABS_URL")
 ABS_TOKEN = os.getenv("ABS_TOKEN")
@@ -427,7 +427,7 @@ scheduler.add_job(
     func=scheduled_user_activity_check,
     trigger='interval',
     minutes=BACKGROUND_TASKS['CREATE_RECOMMENDATIONS_INTERVAL'],
-    args=[app]
+    args=[app, socketio]
 )
 
 scheduler.add_job(

@@ -41,7 +41,7 @@ def scheduled_indexing(app):
              logger.error(f"Error in scheduled indexing: {e}")
 
 
-def scheduled_user_activity_check(app):
+def scheduled_user_activity_check(app, socketio_instance):
     """
     Background task to check for new books and user activity to trigger recommendations.
     """
@@ -104,9 +104,6 @@ def scheduled_user_activity_check(app):
                     try:
                         recs = get_recommendations(user_id=user_id)
                         
-                        # current_time = datetime.now().isoformat()
-                        # Use check_time from before loop to ensure consistency
-                        
                         existing_recs = UserRecommendations.query.filter_by(user_id=user_id).first()
                         
                         if existing_recs:
@@ -122,6 +119,16 @@ def scheduled_user_activity_check(app):
                         
                         db.session.commit()
                         logger.info(f"Recommendations updated for {user.username}")
+                        
+                        # Broadcast websocket event to notify user of new recommendations
+                        try:
+                            socketio_instance.emit('recommendations_ready', {
+                                'recommendations': recs,
+                                'generated_at': check_time
+                            })
+                            logger.debug(f"Broadcasted recommendations_ready event for {user.username}")
+                        except Exception as ws_error:
+                            logger.warning(f"Failed to broadcast websocket event: {ws_error}")
                         
                     except Exception as e:
                         logger.error(f"Error generating recommendations for {user.username}: {e}")
