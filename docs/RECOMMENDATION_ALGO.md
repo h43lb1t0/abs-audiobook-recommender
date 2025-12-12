@@ -42,7 +42,7 @@ The system maintains two distinct vector collections in **ChromaDB**:
 
 2.  **Metadata Collection** (`audiobooks_metadata_v1`):
     -   **Purpose**: Structural matching of creators and format.
-    -   **Input**: Title + Author + Narrator + Series + Duration (rounded).
+    -   **Input**: Title + Author + Narrator + Series.
     -   **Weight**: **40%** of the matching score.
 
 ### Ranking Algorithm
@@ -86,7 +86,52 @@ The system attempts to find "reading soulmates" to diversify recommendations.
     -   **Scaled Boost**: `Score += 0.15 * Similarity` (Scaled to match the 0-1 normalized system).
     -   **Match Reason**: These books are flagged with "Highly relevant to similar user 'Username'".
 
-## 5. Final Selection & LLM Integration
+## 5. Duration Boosting (Smart Post-Processing)
+
+To account for user preferences regarding audiobook length without overfitting, the system employs a sophisticated boosting mechanism that corrects for **Availability Bias**.
+
+### 1. Buckets
+Books are categorized into duration buckets:
+- **Super Short**: < 1 hour
+- **Short**: 1 - 3 hours
+- **Mid-Short**: 3 - 5 hours
+- **Medium**: 5 - 15 hours
+- **Long**: 15 - 24 hours
+- **Epic**: > 24 hours
+
+### 2. Neighbor Bleed (Soft Preferences)
+Instead of hard cutoffs, user preferences "bleed" into neighbor buckets.
+*Example*: If you love "Short" books, the system assumes you also have some affinity for "Super Short" and "Mid-Short" books.
+- **Formula**: `SmoothedAffinity[i] = RawAffinity[i] + (RawAffinity[Neighbors] * 0.1)`
+
+### 3. Availability Bias Correction (Lift)
+We calculate **Lift** to find true preferences relative to the library's supply.
+- **Problem**: If 80% of your library is "Long" books, a user reading 80% "Long" books isn't special—it's random chance.
+- **Solution**: We compare the User's Share to the Library's Share.
+- **Formula**: `Lift = min( (UserSmoothedShare / LibraryShare), 2.5 )`
+    - *Lift > 1.0*: The user likes this category *more* than the library average.
+    - *Lift < 1.0*: The user likes this category *less* than the library average.
+
+### 4. Strictness Gating & Sigmoid Scoring
+The system applies a **Sigmoid Multiplier** to the final score to dynamically adjust for duration preferences.
+
+1.  **Strictness Gating**:
+    -   If a user's affinity for a bucket is below the threshold (< 5% share), the system applies a **Strictness Penalty**.
+    -   **Multiplier**: `0.1x`.
+
+2.  **Sigmoid Multiplier**:
+    -   If the user meets the strictness threshold, a logistic curve is applied based on Lift.
+    -   **Formula**: `Multiplier = 2.0 / (1 + e^(-k * (Lift - 1)))` (where k=3.0).
+    -   **Result**:
+        -   *Lift = 1.0 (Neutral)*: Multiplier = `1.0`.
+        -   *Lift < 1.0 (Low Preference)*: Multiplier approaches `0.3`.
+        -   *Lift > 1.0 (High Preference)*: Multiplier approaches `2.0`.
+
+### 5. Application
+The final RAG score is multiplied by this duration factor:
+`FinalScore = Score * DurationMultiplier`
+
+## 6. Final Selection & LLM Integration
 
 ### Candidate Selection
 The top **50** books with the highest calculated scores are selected as candidates.

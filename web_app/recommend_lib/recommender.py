@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import os
 from collections import Counter
 from typing import Dict, List, Set, Tuple
@@ -111,6 +112,44 @@ def calculate_duration_affinities(finished_books: List[Dict]) -> Dict[str, float
                 smoothed_affinities[right_bucket] = smoothed_affinities.get(right_bucket, 0.0) + bleed_amount
                 
     return smoothed_affinities
+
+
+def calculate_duration_multiplier(user_affinity: float, lift: float) -> float:
+    """
+    Calculates a multiplier for duration score based on user affinity and lift.
+    
+    Logic:
+    1. Strictness Gate: If user_affinity < Threshold, return Penalty (0.1).
+    2. Sigmoid Multiplier: 
+       Multiplier = 2 / (1 + exp(-k * (Lift - 1)))
+       
+       Center (Lift=1.0) -> Multiplier 1.0 (Neutral)
+       Lift < 1.0 -> Multiplier < 1.0 (Penalty)
+       Lift > 1.0 -> Multiplier > 1.0 (Boost)
+       
+    Args:
+        user_affinity: The user's share of books in this bucket (0.0 - 1.0)
+        lift: The calculated lift (UserShare / LibraryShare)
+        
+    Returns:
+        float: The multiplier (e.g. 0.1, 0.8, 1.5, etc.)
+    """
+    
+    # 1. Strictness Gating
+    if user_affinity < DURATION_STRICTNESS_THRESHOLD:
+        return 0.1 # Harsh penalty for buckets the user effectively never listens to
+    
+    # k controls steepness. 
+    k = DURATION_SIGMOID_STEEPNESS 
+    
+    try:
+        sigmoid_val = 2.0 / (1.0 + math.exp(-k * (lift - 1.0)))
+    except OverflowError:
+        # If lift is huge, exp becomes 0 -> 2.0
+        # If lift is tiny negative (not possible here?), exp huge -> 0.0
+        sigmoid_val = 2.0 if (lift - 1.0) > 0 else 0.0
+        
+    return sigmoid_val
 
 
 def rank_candidates(
@@ -300,28 +339,16 @@ def rank_candidates(
         match_score = item['match_score']
         pref_score = item['pref_score']
         
-        # Normalize (clamp negative RAG to 0 for normalization purpose? No, allow penalty to drag it down)
-        # Note: If match_score is negative, norm_rag will be negative.
         norm_rag = match_score / max_rag if max_rag > 0 else 0
         norm_pref = pref_score / max_pref if max_pref > 0 else 0
         
         # Weighted Score (0.7 RAG + 0.3 Pref)
         final_score = (norm_rag * 0.7) + (norm_pref * 0.3)
         
-        # Scale up for display/debug (optional, but keep it 0-1 for consistency)
-        # Actually, let's keep it 0-100 for user understanding? 
-        # The user example was 0.7. Let's stick to 0-1 float for internal score.
-        # But for 'reasons' display like "Score: 2.0", they might expect small numbers now.
-        
         book['_rag_score'] = final_score
 
         # Reasons
         reasons = []
-        
-        # Thresholds adjusted for Normalized scores (roughly)
-        # 50/100 -> 0.5
-        # 0 -> 0
-        # -50 -> -0.5
         
         # Note: We use the NORMALIZED RAG score for "Similarity" reasons
         if norm_rag > 0.5:
@@ -355,27 +382,17 @@ def rank_candidates(
             
         lift = min(lift, 2.5)
         
-        # Only boost if Lift > 1.0 (Meaning they like it MORE than random chance)
-        if lift > 1.0:
-             # Boost Formula: Score * (1 + (Lift * Weight))
-             # Note: If lift is high (e.g. 2.5), boost is Score * (1 + 1.25) = Score * 2.25
-             boost_multiplier = 1.0 + ((lift - 1.0) * DURATION_WEIGHT) # Apply weight to the "extra" affinity?
-             # Wait, prompt said: Score * (1 + (Affinity * Weight)) previously.
-             # Now for lift? Prompt just said "Calculate a boost using this formula" but didn't redefine the formula fully.
-             # Assuming we replace Affinity with Lift in a similar structure?
-             # "FinalScore = RAGScore * (1 + (BucketAffinity * Weight))" was old.
-             # New logic using Lift usually implies we boost by the Lift factor directly or weighted?
-             # Let's interpret "Calculate a boost for each bucket" as substituting Lift into the mechanism.
-             # But Lift can be > 1.0. If Lift is 2.0 and Weight is 0.5, Boost = 1 + (2.0 * 0.5) = 2.0.
-             
-             # Re-reading: "Calculate a boost for each bucket using this formula: FinalScore = RAGScore * (1 + (BucketAffinity * Weight))" (Original request)
-             # "Instead of using the raw user percentage, you should calculate the Lift."
-             # So I should substitute BucketAffinity with Lift.
-             
-             final_score *= (1.0 + (lift * DURATION_WEIGHT))
-             
-             if lift >= 1.5:
-                 reasons.append(f"Duration Match ({duration_bucket.replace('_', ' ').title()})")
+        # Calculate Multiplier using Strictness & Sigmoid
+        duration_multiplier = calculate_duration_multiplier(user_affinity, lift)
+        
+        # Apply Multiplier
+        final_score *= duration_multiplier
+        
+        # Reasons
+        if duration_multiplier >= 1.3:
+             reasons.append(f"Duration Match ({duration_bucket.replace('_', ' ').title()})")
+        elif duration_multiplier <= 0.6:
+             reasons.append(f"Duration Mismatch")
         
         book['_rag_score'] = final_score
         book['_match_reasons'] = reasons
