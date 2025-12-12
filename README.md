@@ -8,11 +8,16 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
 -   **Intelligent Filtering**:
     -   Excludes finished books.
     -   Excludes books currently in progress.
+    -   Excludes books marked as **Abandoned**.
     -   **Series Awareness**: Only recommends the *next* unread book in a series or the first book of a new series.
+    -   **Abandoned Series Filter**: Automatically excludes entire series if a sequenced book is abandoned.
 -   **On-Device RAG (Retrieval Augmented Generation)**:
     -   Uses **local ONNX embeddings** (Jina v3) to understand the semantic meaning of your books.
     -   No external API or expensive GPU required for embeddings.
     -   Finds books with similar descriptions, genres, and themes to your favorites.
+-   **Smart Duration Boosting**:
+    -   Learns your preferred audiobook lengths (e.g., "Short", "Epic").
+    -   Boosts recommendations that match your listening habits while filtering out lengths you avoid.
 -   **(Optional) AI-Powered Recommendations**: 
     -   Connect a LLM (like `llama-server`) to get personalized, explained reasons for each recommendation.
     -   If no LLM is provided, the system provides high-quality ranked matches based on similarity scores.
@@ -83,6 +88,9 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     -   Scores are boosted by:
         -   **User Preferences**: Top authors and genres.
         -   **Collaborative Signals**: High ratings from similar users.
+        -   **Duration Matches**: Books fitting the user's preferred length buckets.
+    -   Scores are penalized by:
+        -   **Negative Signals**: Similarity to abandoned or low-rated books.
 
 See [RECOMMENDATION_ALGO.md](docs/RECOMMENDATION_ALGO.md) for a deep dive into the algorithm.
 
@@ -94,7 +102,7 @@ See [RECOMMENDATION_ALGO.md](docs/RECOMMENDATION_ALGO.md) for a deep dive into t
 - [x] Advanced RAG Integration
 - [x] Scoring system for your audiobooks (Listening History with 1-5 star ratings)
 - [x] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the LLM
-- [ ] A page for books in progress with the option to mark them as abandoned (also used for recommendations algorithm)
+- [x] A page for books in progress with the option to mark them as abandoned (also used for recommendations algorithm)
 - [ ] Docker containerization for easier deployment
 - [ ] Enhanced UI/UX design
 - [ ] ~~Additional filtering options (e.g., by genre, length, narrator)~~
