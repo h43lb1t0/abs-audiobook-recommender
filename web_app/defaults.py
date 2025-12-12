@@ -23,12 +23,11 @@ MOST_COMMON_GENRES = 5 # Maximum number of genres to consider
 MOST_COMMON_AUTHORS = 5 # Maximum number of authors to consider
 MOST_COMMON_NARRATORS = 5 # Maximum number of narrators to consider
 
-DURATION_WEIGHT = 0.5 # How much to boost duration matches (Legacy, might be unused or used as base)
 BLEED_ON_NEIGHBOR_PERCENTAGE = 0.1 # Percentage of affinity to bleed to neighbor buckets
 
 # Duration Strictness Logic
-DURATION_STRICTNESS_THRESHOLD = 0.05 # 5% - Below this share, user gets a penalty
-DURATION_SIGMOID_STEEPNESS = 3.0 # Controls the slope of the sigmoid curve
+DURATION_STRICTNESS_THRESHOLD = 0.02 # 2% - Below this share, user gets a penalty
+DURATION_SIGMOID_STEEPNESS = 1.5 # Controls the slope of the sigmoid curve
 
 # Duration Buckets
 DURATION_BUCKETS = {
