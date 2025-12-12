@@ -746,15 +746,44 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
     series_candidates = {}
     standalone_candidates = []
 
+
+        
+    # --- FETCH ABANDONED BOOKS ---
+    abandoned_ids = set()
+    abandoned_series = set()
+    
+    try:
+        abandoned_entries = UserLib.query.filter_by(user_id=user_id, status='abandoned').all()
+        for entry in abandoned_entries:
+            abandoned_ids.add(entry.book_id)
+            
+            # Check if it's a sequenced series
+            if entry.book_id in items_map:
+                ab_book = items_map[entry.book_id]
+                if ab_book['series'] and ab_book['series_sequence'] is not None:
+                     abandoned_series.add(ab_book['series'])
+                     
+        logger.info(f"Found {len(abandoned_ids)} abandoned books and {len(abandoned_series)} abandoned sequenced series.")
+        
+    except Exception as e:
+        logger.error(f"Error fetching abandoned books: {e}")
+
     for item_id, book in items_map.items():
         if item_id in finished_ids:
             finished_books_list.append(book)
             continue
+            
+        if item_id in abandoned_ids:
+             continue
         
         if item_id in in_progress_ids:
             continue
             
         if (book['title'], book['author']) in cleaned_finished_keys:
+            continue
+            
+        # Filter abandoned series
+        if book['series'] in abandoned_series:
             continue
         
         if book['series']:
