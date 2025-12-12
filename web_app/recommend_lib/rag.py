@@ -50,6 +50,57 @@ def get_rag_system() -> Optional['RAGSystem']:
     return _RAG_INSTANCE
 
 
+def format_duration(duration_seconds: float) -> str:
+    """
+    Formats the duration into rounded string representation.
+    
+    If < 1h: rounds to 15, 30, 45, 60 minutes.
+    If > 1h: minutes part rounds to 0, 15, 30, 45.
+    
+    Args:
+        duration_seconds: Duration in seconds
+        
+    Returns:
+        Formatted string (e.g. "30 minutes", "1 hours 15 minutes")
+    """
+    if not duration_seconds:
+        return ""
+    
+    minutes = duration_seconds / 60.0
+    
+    if minutes < 60:
+        if minutes <= 15:
+            return "15 minutes"
+        elif minutes <= 30:
+            return "30 minutes"
+        elif minutes <= 45:
+            return "45 minutes"
+        else:
+            return "1 hour"
+            
+    else:
+        hours = int(minutes // 60)
+        rem_minutes = minutes % 60
+        
+        rounded_rem = 0
+        if rem_minutes < 7.5:
+            rounded_rem = 0
+        elif rem_minutes < 22.5:
+            rounded_rem = 15
+        elif rem_minutes < 37.5:
+            rounded_rem = 30
+        elif rem_minutes < 52.5:
+            rounded_rem = 45
+        else:
+            hours += 1
+            rounded_rem = 0
+            
+        if rounded_rem == 0:
+            return f"{hours} hours"
+        else:
+            return f"{hours} hours {rounded_rem} minutes"
+
+
 class JinaEmbeddingFunction(embedding_functions.EmbeddingFunction):
     """
     Custom embedding function for Jina v3 using SentenceTransformers.
@@ -153,6 +204,8 @@ class RAGSystem:
             series = item.get('series', '')
             narrator = item.get('narrator', '')
             description = item.get('description', '')
+            duration_val = item.get('duration_seconds')
+            duration_str = format_duration(duration_val) if duration_val else ''
             
             # Construct rich embedding text
             parts = [f"{item['title']} by {item['author']}"]
@@ -164,6 +217,8 @@ class RAGSystem:
                 parts.append(f"Tags: {tags_str}")
             if series:
                 parts.append(f"Series: {series}")
+            if duration_str:
+                parts.append(f"Duration: {duration_str}")
             if description:
                 parts.append(description)
             

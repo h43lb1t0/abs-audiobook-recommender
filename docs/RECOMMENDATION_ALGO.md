@@ -33,7 +33,10 @@ Before any ranking occurs, the system compiles a list of valid candidate books.
 The core mechanism uses **Vector Embeddings** to understand semantic similarity between books.
 
 ### The RAG System
--   **Embeddings**: Uses `jina-embeddings-v3` (via ONNX) to convert book metadata (Title, Author, Genres, Tags, Series, Description) into high-dimensional vectors.
+-   **Embeddings**: Uses `jina-embeddings-v3` (via ONNX) to convert book metadata (Title, Author, Genres, Tags, Series, Description, and **Duration**) into high-dimensional vectors.
+    -   **Duration Handling**: To group books of similar lengths, duration is rounded and added to the embedding text:
+        -   **< 1 hour**: Rounded to 15, 30, 45, or 60 minutes.
+        -   **> 1 hour**: Minutes part is rounded to 0, 15, 30, or 45 (e.g., "1 hour 10 mins" becomes "1 hours 15 minutes").
 -   **Vector Store**: Stores these embeddings in a **ChromaDB** collection (`audiobooks_v3_onnx`).
 
 ### Ranking Algorithm

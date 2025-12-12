@@ -126,7 +126,8 @@ def get_all_items() -> Tuple[dict, dict]:
                 'tags': item.get('media', {}).get('tags', []),
                 'cover': item.get('media', {}).get('coverPath'),
                 'description': description, # Fetch description
-                'lib_name': lib['name'] # Useful for debugging or filtering
+                'lib_name': lib['name'], # Useful for debugging or filtering
+                'duration_seconds': item.get('media', {}).get('duration')
             }
 
             if WRITE_DEBUG_FILES:
