@@ -57,6 +57,7 @@ def rank_candidates(
     finished_books: List[Dict],
     top_genres: Set[str],
     top_authors: Set[str],
+    top_narrators: Set[str],
     user_id: str = None
 ) -> List[Dict]:
     """
@@ -73,6 +74,7 @@ def rank_candidates(
         finished_books (List[Dict]): List of finished books
         top_genres (Set[str]): Set of top genres
         top_authors (Set[str]): Set of top authors
+        top_narrators (Set[str]): Set of top narrators
         user_id (str, optional): User ID. Defaults to None.
 
     Returns:
@@ -175,6 +177,9 @@ def rank_candidates(
 
         if book.get('author', '') in top_authors:
             pref_score += RECOMMENDATION_BOOST['AUTHOR'] # Boost authors
+            
+        if book.get('narrator', '') in top_narrators:
+            pref_score += RECOMMENDATION_BOOST['NARRATOR'] # Boost narrators
             
         total_score = match_score + pref_score
         
@@ -576,21 +581,27 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
 
     genre_counts = Counter()
     author_counts = Counter()
+    narrator_counts = Counter()
     
     for book in finished_books_list:
         for genre in book.get('genres', []):
             genre_counts[genre] += 1
 
         author_counts[book.get('author', '')] += 1
+        
+        narrator = book.get('narrator', 'Unknown')
+        if narrator and narrator != 'Unknown':
+             narrator_counts[narrator] += 1
     
     top_genres = set(g for g, _ in genre_counts.most_common(MOST_COMMON_GENRES))
     top_authors = set(a for a, _ in author_counts.most_common(MOST_COMMON_AUTHORS))
+    top_narrators = set(n for n, _ in narrator_counts.most_common(MOST_COMMON_NARRATORS))
     
     logger.info(f"User preferences - Top genres: {top_genres}, Top authors: {top_authors}")
     
     # --- RANKING ---
 
-    ranked_candidates = rank_candidates(unread_books_candidates, finished_books_list, top_genres, top_authors, user_id)
+    ranked_candidates = rank_candidates(unread_books_candidates, finished_books_list, top_genres, top_authors, top_narrators, user_id)
     
 
     # --- COLLABORATIVE FILTERING BONUS ---
@@ -670,7 +681,7 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
                    reason_text = f"Recommended based on your history causing a high match score. Similar to: {', '.join(reasons)}"
             else:
 
-                reason_text = f"Recommended based on genre/author preferences. Score: {score}"
+                reason_text = f"Recommended based on genre/author/narrator preferences. Score: {score}"
                 
             final_recommendations.append({
                 'id': book['id'],

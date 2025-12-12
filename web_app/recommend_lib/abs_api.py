@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
+WRITE_DEBUG_FILES = False
+
 load_dotenv()
 
 ABS_URL = os.getenv("ABS_URL")
@@ -82,8 +84,9 @@ def get_all_items() -> Tuple[dict, dict]:
         items_resp = requests.get(items_url, headers=HEADERS)
         items_resp.raise_for_status()
 
-        with open('items_resp.json', 'w', encoding='utf-8') as f:
-            json.dump(items_resp.json(), f, ensure_ascii=False, indent=4)
+        if WRITE_DEBUG_FILES:
+            with open('items_resp.json', 'w', encoding='utf-8') as f:
+                json.dump(items_resp.json(), f, ensure_ascii=False, indent=4)
 
         for item in items_resp.json().get('results', []):
             metadata = item.get('media', {}).get('metadata', {})
@@ -116,6 +119,7 @@ def get_all_items() -> Tuple[dict, dict]:
                 'id': item['id'],
                 'title': metadata.get('title', item.get('name')),
                 'author': metadata.get('authorName', 'Unknown'),
+                'narrator': metadata.get('narratorName', 'Unknown'),
                 'series': series_name,
                 'series_sequence': series_sequence,
                 'genres': metadata.get('genres', []),
@@ -124,8 +128,10 @@ def get_all_items() -> Tuple[dict, dict]:
                 'description': description, # Fetch description
                 'lib_name': lib['name'] # Useful for debugging or filtering
             }
-            with open('items_map.json', 'w', encoding='utf-8') as f:
-                json.dump(items_map, f, ensure_ascii=False, indent=4)
+
+            if WRITE_DEBUG_FILES:
+                with open('items_map.json', 'w', encoding='utf-8') as f:
+                    json.dump(items_map, f, ensure_ascii=False, indent=4)
 
 
             if not items_map[item['id']]['author'] or items_map[item['id']]['author'] == 'Unknown':

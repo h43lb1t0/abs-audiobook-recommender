@@ -151,10 +151,13 @@ class RAGSystem:
             tags = item.get('tags', [])
             tags_str = ', '.join(tags) if tags else ''
             series = item.get('series', '')
+            narrator = item.get('narrator', '')
             description = item.get('description', '')
             
             # Construct rich embedding text
             parts = [f"{item['title']} by {item['author']}"]
+            if narrator and narrator != 'Unknown':
+                parts.append(f"Narrated by {narrator}")
             if genres_str:
                 parts.append(f"Genres: {genres_str}")
             if tags_str:
@@ -171,6 +174,7 @@ class RAGSystem:
             metadatas.append({
                 "title": item['title'],
                 "author": item['author'],
+                "narrator": narrator or '',
                 "genres": ','.join(genres) if genres else '',
                 "series": series or '',
                 "tags": ','.join(tags) if tags else ''

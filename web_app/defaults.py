@@ -13,10 +13,12 @@ BACKGROUND_TASKS = {
 
 RECOMMENDATION_BOOST = {
     "GENRE" : 10, # How much to boost genre matches
-    "AUTHOR" : 15 # How much to boost author matches
+    "AUTHOR" : 15, # How much to boost author matches
+    "NARRATOR" : 5 # How much to boost narrator matches
 }
 
 DEFAULT_RATING = 3 # Default rating for unrated books
 MAX_CLUSTERS = 5 # Maximum number of clusters to generate
 MOST_COMMON_GENRES = 5 # Maximum number of genres to consider
 MOST_COMMON_AUTHORS = 5 # Maximum number of authors to consider
+MOST_COMMON_NARRATORS = 5 # Maximum number of narrators to consider
