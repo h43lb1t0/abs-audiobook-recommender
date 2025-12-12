@@ -58,6 +58,7 @@ The system ranks unread books using a **Two-Phase** approach based on user ratin
 On top of semantic similarity, the system applies explicit boosts for metadata matches:
 -   **Top Genres**: +10 points if the book matches one of the user's top 5 most-read genres.
 -   **Top Authors**: +15 points if the book matches one of the user's top 5 most-read authors.
+-   **Top Narrators**: +5 points if the book matches one of the user's top 5 most-read narrators.
 
 ## 4. Collaborative Filtering
 
@@ -114,7 +115,8 @@ graph TD
     K --> M
     L --> M
     
-    N[User Top Stats] -->|Genre/Author Boost| M
+    N[User Top Stats] -->|Genre/Author/Narrator Boost| M
+
     O[Other Users] -->|Collaborative Filter| M
     
     M --> P[Top 50 Ranked]
