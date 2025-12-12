@@ -52,6 +52,67 @@ def _load_language_file(language: str, type: str) -> str:
     return content
 
 
+
+def get_duration_bucket(duration_seconds: float) -> str:
+    """
+    Determines the duration bucket for a given duration.
+    
+    Args:
+        duration_seconds: Duration in seconds.
+        
+    Returns:
+        str: Bucket name.
+    """
+    if not duration_seconds:
+        return None
+        
+    for bucket, limits in DURATION_BUCKETS.items():
+        min_val = limits.get('min', 0)
+        max_val = limits.get('max', float('inf'))
+        
+        if min_val <= duration_seconds < max_val:
+            return bucket
+            
+    return None
+
+
+def calculate_duration_affinities(finished_books: List[Dict]) -> Dict[str, float]:
+    """
+    Calculates the user's affinity for each duration bucket.
+    
+    Formula: Count(Bucket) / TotalBooks
+    If TotalBooks < 5, returns uniform affinity (0.2) for all buckets.
+    
+    Args:
+        finished_books: List of finished books.
+        
+    Returns:
+        Dict mapping bucket name -> percentage (0.0 - 1.0).
+    """
+    if not finished_books:
+        return {}
+        
+    total_books = len(finished_books)
+    
+    # Fallback for few books
+    if total_books < 5:
+        return {bucket: 0.2 for bucket in DURATION_BUCKETS}
+        
+    counts = Counter()
+    
+    for book in finished_books:
+        dur = book.get('duration_seconds')
+        bucket = get_duration_bucket(dur)
+        if bucket:
+            counts[bucket] += 1
+            
+    affinities = {}
+    for bucket in DURATION_BUCKETS:
+        affinities[bucket] = counts[bucket] / total_books
+        
+    return affinities
+
+
 def rank_candidates(
     unread_books: List[Dict],
     finished_books: List[Dict],
@@ -109,6 +170,12 @@ def rank_candidates(
             neutral_ids.append(book_id)
     
     logger.info(f"Rating categories: {len(positive_ids)} liked (4-5★), {len(negative_ids)} disliked (1-2★), {len(neutral_ids)} neutral")
+    
+    # Calculate Duration Affinities
+    bucket_affinities = calculate_duration_affinities(finished_books)
+    if any(a > 0.2 for a in bucket_affinities.values()): # Only log if we have actual data (not using the 0.2 fallback everywhere effectively)
+         logger.info(f"Duration Affinities: { {k: round(v, 2) for k, v in bucket_affinities.items() if v > 0} }")
+
     
     candidate_scores = Counter()
     match_reasons = {} # book_id -> {set of reasons}
@@ -258,6 +325,20 @@ def rank_candidates(
         elif "Metadata Match" in specific_reasons:
              reasons.append("Style/Author Match")
              
+        # Duration Boost
+        duration_affinity = bucket_affinities.get(get_duration_bucket(book.get('duration_seconds')), 0.0)
+        
+        if duration_affinity > 0:
+             # Boost Formula: Score * (1 + (Affinity * Weight))
+             boost_multiplier = 1.0 + (duration_affinity * DURATION_WEIGHT)
+             final_score *= boost_multiplier
+             
+             # Add reason if highly relevant (e.g. they read this length > 30% of the time, or if it's the dominant factor)
+             # Let's say if affinity is >= 0.25 (1/4 of their books) it's worth noting?
+             if duration_affinity >= 0.25:
+                 reasons.append(f"Duration Match ({get_duration_bucket(book.get('duration_seconds')).replace('_', ' ').title()})")
+        
+        book['_rag_score'] = final_score
         book['_match_reasons'] = reasons
         ranked_books.append(book)
 

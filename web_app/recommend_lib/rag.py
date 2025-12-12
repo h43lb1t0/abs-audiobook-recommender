@@ -233,8 +233,9 @@ class RAGSystem:
                 metadata_parts.append(f"Narrated by {narrator}")
             if series:
                 metadata_parts.append(f"Series: {series}")
-            if duration_str:
-                metadata_parts.append(f"Duration: {duration_str}")
+            if series:
+                metadata_parts.append(f"Series: {series}")
+            # Duration removed from RAG embedding as per new logic
 
             metadata_text = ". ".join(metadata_parts)
             
