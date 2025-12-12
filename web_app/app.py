@@ -13,7 +13,7 @@ from flask import (Flask, Response, flash, jsonify, redirect, render_template,
 from flask_apscheduler import APScheduler
 from flask_login import (LoginManager, current_user, login_required,
                          login_user, logout_user)
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room
 from logger_conf import setup_logging
 from recommend_lib.abs_api import (get_abs_users, get_all_items,
                                    get_finished_books)
@@ -317,6 +317,17 @@ def recommend():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@socketio.on('connect')
+def handle_connect():
+    """
+    Handle new websocket connection
+    """
+    if current_user.is_authenticated:
+        logger.info(f"User {current_user.id} connected to websocket. Joining room {current_user.id}")
+        join_room(current_user.id)
+    else:
+        logger.info("Anonymous user connected to websocket")
+
 @socketio.on('get_recommendations')
 def handle_get_recommendations(data):
     """
@@ -429,7 +440,12 @@ def force_sync():
         logger.error(f"Error in force sync: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/debug/force-check')
+def debug_force_check():
+    scheduled_user_activity_check(app, socketio)
+    return "Check triggered"
+
 if __name__ == '__main__':
     init_db()
     init_rag_system()
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=False)

@@ -101,7 +101,7 @@ def scheduled_user_activity_check(app, socketio_instance):
                         should_generate = True
 
                 if should_generate:
-                    logger.info(f"Generating background recommendations for {user.username}")
+                    logger.info(f"BGT: Generating background recommendations for {user.username} (ID: {user_id})")
                     try:
                         recs = get_recommendations(user_id=user_id)
                         
@@ -119,20 +119,22 @@ def scheduled_user_activity_check(app, socketio_instance):
                             db.session.add(new_recs)
                         
                         db.session.commit()
-                        logger.info(f"Recommendations updated for {user.username}")
+                        logger.info(f"BGT: Recommendations updated for {user.username}. Emitting to room {user_id}")
                         
                         # Broadcast websocket event to notify user of new recommendations
                         try:
                             socketio_instance.emit('recommendations_ready', {
                                 'recommendations': recs,
                                 'generated_at': check_time
-                            })
-                            logger.debug(f"Broadcasted recommendations_ready event for {user.username}")
+                            }, room=user_id)
+                            logger.debug(f"BGT: Successfully emitted recommendations_ready event for {user.username} to room {user_id}")
                         except Exception as ws_error:
-                            logger.warning(f"Failed to broadcast websocket event: {ws_error}")
+                            logger.warning(f"BGT: Failed to broadcast websocket event: {ws_error}")
                         
                     except Exception as e:
-                        logger.error(f"Error generating recommendations for {user.username}: {e}")
+                        logger.error(f"BGT: Error generating recommendations for {user.username}: {e}")
+                else:
+                    logger.debug(f"BGT: No recommendations needed for {user.username}")
             
             # Update the log if we processed the global trigger
             if new_books_trigger and last_check_log:
@@ -140,4 +142,4 @@ def scheduled_user_activity_check(app, socketio_instance):
                 db.session.commit()
                 
         except Exception as e:
-            logger.error(f"Error in background check task: {e}")
+            logger.error(f"BGT: Error in background check task: {e}")

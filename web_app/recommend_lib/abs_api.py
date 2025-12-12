@@ -126,7 +126,7 @@ def get_all_items() -> Tuple[dict, dict]:
             }
             with open('items_map.json', 'w', encoding='utf-8') as f:
                 json.dump(items_map, f, ensure_ascii=False, indent=4)
-            logger.debug(f"Added item {item['id']} to items_map with description: {items_map[item['id']]['description']}")
+
 
             if not items_map[item['id']]['author'] or items_map[item['id']]['author'] == 'Unknown':
                 authors = metadata.get('authors', [])
