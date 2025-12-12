@@ -447,5 +447,6 @@ def debug_force_check():
 
 if __name__ == '__main__':
     init_db()
-    init_rag_system()
+    with app.app_context():
+        init_rag_system()
     socketio.run(app, debug=False)

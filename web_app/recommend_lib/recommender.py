@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import os
 from collections import Counter
 from typing import Dict, List, Set, Tuple
@@ -10,8 +11,9 @@ from dotenv import load_dotenv
 from recommend_lib.abs_api import (get_abs_users, get_all_items,
                                    get_finished_books)
 from recommend_lib.llm import generate_book_recommendations
-from recommend_lib.rag import get_rag_system
+from recommend_lib.rag import get_rag_system, get_duration_bucket
 from sklearn.cluster import KMeans
+from db import LibraryStats
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +54,110 @@ def _load_language_file(language: str, type: str) -> str:
     return content
 
 
+
+
+
+def calculate_duration_affinities(finished_books: List[Dict]) -> Dict[str, float]:
+    """
+    Calculates the user's affinity for each duration bucket.
+    
+    Formula: Count(Bucket) / TotalBooks
+    If TotalBooks < 5, returns uniform affinity (0.2) for all buckets.
+    
+    Args:
+        finished_books: List of finished books.
+        
+    Returns:
+        Dict mapping bucket name -> percentage (0.0 - 1.0).
+    """
+    if not finished_books:
+        return {}
+        
+    total_books = len(finished_books)
+    
+    # Fallback for few books
+    if total_books < 5:
+        return {bucket: 0.2 for bucket in DURATION_BUCKETS}
+        
+    counts = Counter()
+    
+    for book in finished_books:
+        dur = book.get('duration_seconds')
+        bucket = get_duration_bucket(dur)
+        if bucket:
+            counts[bucket] += 1
+            
+    affinities = {}
+    for bucket in DURATION_BUCKETS:
+        affinities[bucket] = counts[bucket] / total_books
+        
+    # --- Apply Neighbor Bleed ---
+    # Buckets ordered by length
+    ordered_buckets = ["super_short", "short", "mid_short", "medium", "long", "epic"]
+    smoothed_affinities = affinities.copy()
+    
+    for i, bucket in enumerate(ordered_buckets):
+        raw_val = affinities.get(bucket, 0.0)
+        if raw_val > 0:
+            bleed_amount = raw_val * BLEED_ON_NEIGHBOR_PERCENTAGE
+            
+            # Bleed left
+            if i > 0:
+                left_bucket = ordered_buckets[i-1]
+                smoothed_affinities[left_bucket] = smoothed_affinities.get(left_bucket, 0.0) + bleed_amount
+                
+            # Bleed right
+            if i < len(ordered_buckets) - 1:
+                right_bucket = ordered_buckets[i+1]
+                smoothed_affinities[right_bucket] = smoothed_affinities.get(right_bucket, 0.0) + bleed_amount
+                
+    return smoothed_affinities
+
+
+def calculate_duration_multiplier(user_affinity: float, lift: float) -> float:
+    """
+    Calculates a multiplier for duration score based on user affinity and lift.
+    
+    Logic:
+    1. Strictness Gate: If user_affinity < Threshold, return Penalty (0.1).
+    2. Sigmoid Multiplier: 
+       Multiplier = 2 / (1 + exp(-k * (Lift - 1)))
+       
+       Center (Lift=1.0) -> Multiplier 1.0 (Neutral)
+       Lift < 1.0 -> Multiplier < 1.0 (Penalty)
+       Lift > 1.0 -> Multiplier > 1.0 (Boost)
+       
+    Args:
+        user_affinity: The user's share of books in this bucket (0.0 - 1.0)
+        lift: The calculated lift (UserShare / LibraryShare)
+        
+    Returns:
+        float: The multiplier (e.g. 0.1, 0.8, 1.5, etc.)
+    """
+    
+    # 1. Strictness Gating
+    if user_affinity < DURATION_STRICTNESS_THRESHOLD:
+        return 0.1 # Harsh penalty for buckets the user effectively never listens to
+    
+    # k controls steepness. 
+    k = DURATION_SIGMOID_STEEPNESS 
+    
+    try:
+        sigmoid_val = 2.0 / (1.0 + math.exp(-k * (lift - 1.0)))
+    except OverflowError:
+        # If lift is huge, exp becomes 0 -> 2.0
+        # If lift is tiny negative (not possible here?), exp huge -> 0.0
+        sigmoid_val = 2.0 if (lift - 1.0) > 0 else 0.0
+        
+    return sigmoid_val
+
+
 def rank_candidates(
     unread_books: List[Dict],
     finished_books: List[Dict],
     top_genres: Set[str],
     top_authors: Set[str],
+    top_narrators: Set[str],
     user_id: str = None
 ) -> List[Dict]:
     """
@@ -66,13 +167,14 @@ def rank_candidates(
     1. Query phase: Find candidates similar to positively-rated books (4-5★)
     2. Penalty phase: Demote candidates similar to negatively-rated books (1-2★)
 
-    Annotates books with '_rag_score' and '_match_reasons'.
+    Now splits query into Content (semantic) and Metadata (structural) matching.
 
     Args:
         unread_books (List[Dict]): List of unread books
         finished_books (List[Dict]): List of finished books
         top_genres (Set[str]): Set of top genres
         top_authors (Set[str]): Set of top authors
+        top_narrators (Set[str]): Set of top narrators
         user_id (str, optional): User ID. Defaults to None.
 
     Returns:
@@ -108,90 +210,193 @@ def rank_candidates(
     
     logger.info(f"Rating categories: {len(positive_ids)} liked (4-5★), {len(negative_ids)} disliked (1-2★), {len(neutral_ids)} neutral")
     
-    candidate_scores = Counter()
-    
-    query_embeddings = []
-    log_prefix = ""
-    
-    if positive_ids:
-        query_embeddings = rag.get_embeddings(positive_ids)
-        log_prefix = f"Phase 1: Querying with {len(positive_ids)} positively-rated books"
-    else:
-        all_ids = [book['id'] for book in finished_books if book.get('id')]
-        query_embeddings = rag.get_embeddings(all_ids)
-        log_prefix = f"Phase 1 (fallback): Querying with all {len(all_ids)} finished books"
-
-    if query_embeddings:
-        cluster_vectors = calculate_cluster_vectors(query_embeddings, max_clusters=MAX_CLUSTERS)
-        logger.info(f"{log_prefix} -> Generated {len(cluster_vectors)} clusters")
+    # Load Library Distribution
+    library_distribution = {}
+    try:
+        stats_entry = LibraryStats.query.filter_by(key='duration_distribution').first()
+        if stats_entry:
+            library_distribution = json.loads(stats_entry.value_json)
+            logger.info(f"Loaded Library Distribution: { {k: round(v, 2) for k, v in library_distribution.items()} }")
+        else:
+            logger.warning("Library Duration Distribution not found in DB. Defaulting to uniform.")
+            library_distribution = {b: 0.2 for b in DURATION_BUCKETS}
+    except Exception as e:
+        logger.error(f"Error loading library stats: {e}")
+        library_distribution = {b: 0.2 for b in DURATION_BUCKETS}
         
-        for i, vector in enumerate(cluster_vectors):
-            similar_items = rag.retrieve_by_embedding(vector, n_results=100)
-            
-            for idx, (sid, dist) in enumerate(similar_items):
-                
-                safe_dist = max(0.0, dist)
-                similarity = 1.0 - (safe_dist / 2.0)
-                
-                base_score = similarity * 100.0
-                
-                score_multiplier = 2.0 if positive_ids else 1.0
-                
-                candidate_scores[sid] += base_score * score_multiplier
-                
+    # Calculate Duration Affinities
+    bucket_affinities = calculate_duration_affinities(finished_books)
+    if any(a > 0.2 for a in bucket_affinities.values()): # Only log if we have actual data (not using the 0.2 fallback everywhere effectively)
+         logger.info(f"User Duration Affinities: { {k: round(v, 2) for k, v in bucket_affinities.items() if v > 0} }")
+
     
-    # === PHASE 2: Penalize similarity to negatively-rated books ===
-    if negative_ids:
-        negative_embeddings = rag.get_embeddings(negative_ids)
-        if negative_embeddings:
-            logger.info(f"Phase 2: Penalizing similarity to {len(negative_ids)} negatively-rated books (individual embeddings)")
+    candidate_scores = Counter()
+    match_reasons = {} # book_id -> {set of reasons}
+    
+    
+    # --- Helper to process queries ---
+    def process_query_ids(ids, weight_multiplier=1.0, is_penalty=False):
+        if not ids: return
+        
+        embeddings_dict = rag.get_embeddings(ids)
+        
+        # Process Content
+        if embeddings_dict['content']:
+            content_clusters = calculate_cluster_vectors(embeddings_dict['content'], max_clusters=MAX_CLUSTERS)
+            logger.info(f"  -> Generated {len(content_clusters)} content clusters")
             
-            for i, neg_vector in enumerate(negative_embeddings):
-                disliked_similar = rag.retrieve_by_embedding(neg_vector, n_results=50)
-                
-                for idx, (sid, dist) in enumerate(disliked_similar):
+            for vector in content_clusters:
+                similar_items = rag.retrieve_by_embedding(vector, n_results=100, collection_type='content')
+                for sid, dist in similar_items:
+                    # Content Sim
                     safe_dist = max(0.0, dist)
                     similarity = 1.0 - (safe_dist / 2.0)
                     
-                    if similarity > 0:
-                        penalty = similarity * 100.0 * 1.5
-                        candidate_scores[sid] -= penalty
+                    score = similarity * 100.0 * 0.6 * weight_multiplier # 60% weight for Content
+                    
+                    if is_penalty:
+                         candidate_scores[sid] -= score * 1.5
+                    else:
+                         candidate_scores[sid] += score
+                         if score > 10:
+                             if sid not in match_reasons: match_reasons[sid] = set()
+                             match_reasons[sid].add("Content Match")
 
-            logger.info("Applied penalties based on negative ratings")
+
+        # Process Metadata
+        if embeddings_dict['metadata']:
+            meta_clusters = calculate_cluster_vectors(embeddings_dict['metadata'], max_clusters=MAX_CLUSTERS)
+            logger.info(f"  -> Generated {len(meta_clusters)} metadata clusters")
+            
+            for vector in meta_clusters:
+                similar_items = rag.retrieve_by_embedding(vector, n_results=100, collection_type='metadata')
+                for sid, dist in similar_items:
+                    # Metadata Sim
+                    safe_dist = max(0.0, dist)
+                    similarity = 1.0 - (safe_dist / 2.0)
+                    
+                    score = similarity * 100.0 * 0.4 * weight_multiplier # 40% weight for Metadata
+                    
+                    if is_penalty:
+                         candidate_scores[sid] -= score * 1.5
+                    else:
+                         candidate_scores[sid] += score
+                         if score > 10:
+                             if sid not in match_reasons: match_reasons[sid] = set()
+                             match_reasons[sid].add("Metadata Match")
+
+    # --- Phase 1: Positive ---
+    if positive_ids:
+        logger.info(f"Phase 1: Querying with {len(positive_ids)} positively-rated books")
+        process_query_ids(positive_ids, weight_multiplier=2.0)
+    else:
+        all_ids = [book['id'] for book in finished_books if book.get('id')]
+        logger.info(f"Phase 1 (fallback): Querying with all {len(all_ids)} finished books")
+        process_query_ids(all_ids, weight_multiplier=1.0)
+        
+    # --- Phase 2: Negative ---
+    if negative_ids:
+         logger.info(f"Phase 2: Penalizing {len(negative_ids)} negative books")
+         process_query_ids(negative_ids, weight_multiplier=1.0, is_penalty=True)
+
 
     ranked_books = []
+    
+    # 1. Collect Raw Scores
+    raw_candidates = []
+    max_rag = 1.0 # Avoid div by zero
+    max_pref = 1.0
 
     for book in unread_books:
-
         book_id = book['id']
-
-        match_score = candidate_scores.get(book_id, 0)
+        match_score = candidate_scores.get(book_id, 0) # Raw RAG score
         
         pref_score = 0
-
         for genre in book.get('genres', []):
             if genre in top_genres:
-                pref_score += RECOMMENDATION_BOOST['GENRE'] # Boost genres
-
+                pref_score += RECOMMENDATION_BOOST['GENRE']
         if book.get('author', '') in top_authors:
-            pref_score += RECOMMENDATION_BOOST['AUTHOR'] # Boost authors
+            pref_score += RECOMMENDATION_BOOST['AUTHOR']
+        if book.get('narrator', '') in top_narrators:
+            pref_score += RECOMMENDATION_BOOST['NARRATOR']
             
-        total_score = match_score + pref_score
+        # Update Maxes
+        if match_score > max_rag: max_rag = match_score
+        if pref_score > max_pref: max_pref = pref_score
         
-        book['_rag_score'] = total_score
+        raw_candidates.append({
+            'book': book,
+            'match_score': match_score,
+            'pref_score': pref_score,
+            'reasons': []
+        })
+        
+    logger.info(f"Scoring Normalization - Max RAG: {max_rag}, Max Pref: {max_pref}")
 
+    # 2. Normalize and Combine
+    for item in raw_candidates:
+        book = item['book']
+        match_score = item['match_score']
+        pref_score = item['pref_score']
+        
+        norm_rag = match_score / max_rag if max_rag > 0 else 0
+        norm_pref = pref_score / max_pref if max_pref > 0 else 0
+        
+        # Weighted Score (0.7 RAG + 0.3 Pref)
+        final_score = (norm_rag * 0.7) + (norm_pref * 0.3)
+        
+        book['_rag_score'] = final_score
+
+        # Reasons
         reasons = []
-        if match_score > 50:
+        
+        # Note: We use the NORMALIZED RAG score for "Similarity" reasons
+        if norm_rag > 0.5:
             reasons.append("Similar to books you loved")
-        elif match_score > 0:
+        elif norm_rag > 0:
             reasons.append("Matches your reading profile")
-        elif match_score < -50:
+        elif norm_rag < -0.5:
             reasons.append("Note: Similar to books you disliked")
+            
+        specific_reasons = match_reasons.get(book['id'], set())
+        if "Content Match" in specific_reasons and "Metadata Match" in specific_reasons:
+             reasons.append("Strong Content & Style Match")
+        elif "Content Match" in specific_reasons:
+             reasons.append("Content Match")
+        elif "Metadata Match" in specific_reasons:
+             reasons.append("Style/Author Match")
+             
+        # Duration Boost
+        # Duration Boost (Lift-based)
+        duration_bucket = get_duration_bucket(book.get('duration_seconds'))
+        user_affinity = bucket_affinities.get(duration_bucket, 0.0)
+        library_share = library_distribution.get(duration_bucket, 1.0) # Default to 1.0 to avoid huge lift if missing
         
+        # Calculate Lift
+        # Lift = min( (UserShare / LibraryShare), 2.5 )
+        lift = 0.0
+        if library_share > 0:
+            lift = user_affinity / library_share
+        else:
+            lift = 0.0 # Should not happen if lib stats are correct
+            
+        lift = min(lift, 2.5)
+        
+        # Calculate Multiplier using Strictness & Sigmoid
+        duration_multiplier = calculate_duration_multiplier(user_affinity, lift)
+        
+        # Apply Multiplier
+        final_score *= duration_multiplier
+        
+        # Reasons
+        if duration_multiplier >= 1.3:
+             reasons.append(f"Duration Match ({duration_bucket.replace('_', ' ').title()})")
+        elif duration_multiplier <= 0.6:
+             reasons.append(f"Duration Mismatch")
+        
+        book['_rag_score'] = final_score
         book['_match_reasons'] = reasons
-        
         ranked_books.append(book)
-
 
     ranked_books.sort(key=lambda x: -x.get('_rag_score', 0))
     
@@ -388,7 +593,7 @@ def calculate_max_cluster_similarity(clusters_a: List[List[float]], clusters_b: 
 
 
 def get_collaborative_recommendations(
-    current_user_clusters: List[List[float]], 
+    current_user_ids: List[str],
     current_user_id: str, 
     items_map: Dict,
     rag_system
@@ -397,7 +602,7 @@ def get_collaborative_recommendations(
     Finds the most similar user and returns their top recommendations.
 
     Args:
-        current_user_clusters: List of cluster vectors for the current user
+        current_user_ids: List of book IDs representing the current user's history/likes
         current_user_id: ID of the current user
         items_map: Dictionary mapping book_id -> book object
         rag_system: RAG system for generating recommendations
@@ -411,8 +616,19 @@ def get_collaborative_recommendations(
     best_similarity = -1.0
 
     most_similar_user = None
-    most_similar_mean_vector = None
+    most_similar_clusters = {'content': [], 'metadata': []}
     
+    if not current_user_ids:
+        return [], None, 0.0
+
+    # Get my embeddings
+    my_embeddings = rag_system.get_embeddings(current_user_ids)
+    if not my_embeddings['content'] and not my_embeddings['metadata']:
+        return [], None, 0.0
+        
+    my_content_clusters = calculate_cluster_vectors(my_embeddings['content'], max_clusters=5)
+    my_metadata_clusters = calculate_cluster_vectors(my_embeddings['metadata'], max_clusters=5)
+
     logger.info(f"Checking {len(all_users)} users for collaborative filtering...")
     
     for user in all_users:
@@ -432,49 +648,46 @@ def get_collaborative_recommendations(
         if not valid_ids:
             continue
 
-        embeddings = rag_system.get_embeddings(valid_ids)
-
-        if not embeddings:
-            continue
-            
-        user_cluster_vectors = calculate_cluster_vectors(embeddings, max_clusters=5)
+        their_embeddings = rag_system.get_embeddings(valid_ids)
         
-        matching_vectors = []
-        max_user_sim = 0.0
+        # Calculate similarities
+        content_sim = 0.0
+        metadata_sim = 0.0
         
-        for their_vec in user_cluster_vectors:
-            # Check if this cluster matches any of my clusters
-            best_match_score = 0.0
-            for my_vec in current_user_clusters:
-                sim = cosine_similarity(my_vec, their_vec)
-                if sim > best_match_score:
-                    best_match_score = sim
-            
-            if best_match_score > max_user_sim:
-                max_user_sim = best_match_score
-            
-            # If this cluster is similar enough to one of mine, include it
-            if best_match_score > 0.6: # Configurable threshold
-                matching_vectors.append(their_vec)
+        if their_embeddings['content']:
+             their_content_clusters = calculate_cluster_vectors(their_embeddings['content'], max_clusters=5)
+             content_sim = calculate_max_cluster_similarity(my_content_clusters, their_content_clusters)
+             
+        if their_embeddings['metadata']:
+             their_metadata_clusters = calculate_cluster_vectors(their_embeddings['metadata'], max_clusters=5)
+             metadata_sim = calculate_max_cluster_similarity(my_metadata_clusters, their_metadata_clusters)
         
-        if max_user_sim > best_similarity:
-            best_similarity = max_user_sim
+        # Combined Similarity (Average)
+        total_sim = (content_sim + metadata_sim) / 2.0
+        
+        if total_sim > best_similarity:
+            best_similarity = total_sim
             most_similar_user = user
-            # ONLY store the clusters that matched
-            most_similar_mean_vector = matching_vectors 
+            most_similar_clusters = {
+                'content': their_content_clusters if their_embeddings['content'] else [],
+                'metadata': their_metadata_clusters if their_embeddings['metadata'] else []
+            }
             
-    if most_similar_user and best_similarity > 0.5 and most_similar_mean_vector: 
+    if most_similar_user and best_similarity > 0.5: 
 
         logger.info(f"Most similar user found: {most_similar_user.get('username')} with score {best_similarity}")
-        logger.info(f"Using {len(most_similar_mean_vector)} matching clusters for cross-recommendation.")
         
         similar_ids_set = set()
         
-        # Iterate over their matching clusters to get books
-        for vector in most_similar_mean_vector:
-             items = rag_system.retrieve_by_embedding(vector, n_results=20)
-             similar_ids_set.update([item[0] for item in items])
-             
+        # Helper to retrieve from clusters
+        def retrieve_from_clusters(clusters, type_):
+             for vector in clusters:
+                 items = rag_system.retrieve_by_embedding(vector, n_results=10, collection_type=type_)
+                 similar_ids_set.update([item[0] for item in items])
+                 
+        retrieve_from_clusters(most_similar_clusters['content'], 'content')
+        retrieve_from_clusters(most_similar_clusters['metadata'], 'metadata')
+
         similar_ids = list(similar_ids_set)
 
         collab_candidates = []
@@ -576,21 +789,27 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
 
     genre_counts = Counter()
     author_counts = Counter()
+    narrator_counts = Counter()
     
     for book in finished_books_list:
         for genre in book.get('genres', []):
             genre_counts[genre] += 1
 
         author_counts[book.get('author', '')] += 1
+        
+        narrator = book.get('narrator', 'Unknown')
+        if narrator and narrator != 'Unknown':
+             narrator_counts[narrator] += 1
     
     top_genres = set(g for g, _ in genre_counts.most_common(MOST_COMMON_GENRES))
     top_authors = set(a for a, _ in author_counts.most_common(MOST_COMMON_AUTHORS))
+    top_narrators = set(n for n, _ in narrator_counts.most_common(MOST_COMMON_NARRATORS))
     
     logger.info(f"User preferences - Top genres: {top_genres}, Top authors: {top_authors}")
     
     # --- RANKING ---
 
-    ranked_candidates = rank_candidates(unread_books_candidates, finished_books_list, top_genres, top_authors, user_id)
+    ranked_candidates = rank_candidates(unread_books_candidates, finished_books_list, top_genres, top_authors, top_narrators, user_id)
     
 
     # --- COLLABORATIVE FILTERING BONUS ---
@@ -600,6 +819,8 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
     ratings_map = get_user_ratings(user_id) if user_id else {}
     
     # Get positive-rated book IDs
+    target_ids = []
+    
     positive_ids = []
     for book in finished_books_list:
         book_id = book.get('id')
@@ -610,17 +831,14 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
     
     # Use positive books if available, otherwise fall back to all
     if positive_ids:
-        current_embeddings = rag.get_embeddings(positive_ids)
+        target_ids = positive_ids
     else:
-        current_seed_ids = [book['id'] for book in finished_books_list if book.get('id')]
-        current_embeddings = rag.get_embeddings(current_seed_ids)
+        target_ids = [book['id'] for book in finished_books_list if book.get('id')]
     
-    if current_embeddings:
-        # Calculate clusters for me
-        current_user_clusters = calculate_cluster_vectors(current_embeddings, max_clusters=5)
+    if target_ids:
         
         collab_recs, similar_user, similarity_score = get_collaborative_recommendations(
-            current_user_clusters, 
+            target_ids, 
             user_id if user_id else "me",
             items_map,
             rag
@@ -633,7 +851,7 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
             
             for book in ranked_candidates:
                 if book['id'] in collab_ids:
-                    boost_amount = 15 * similarity_score
+                    boost_amount = 0.15 * similarity_score
                     book['_rag_score'] += boost_amount
 
                     if '_match_reasons' not in book:
@@ -670,7 +888,7 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
                    reason_text = f"Recommended based on your history causing a high match score. Similar to: {', '.join(reasons)}"
             else:
 
-                reason_text = f"Recommended based on genre/author preferences. Score: {score}"
+                reason_text = f"Recommended based on genre/author/narrator preferences. Score: {score}"
                 
             final_recommendations.append({
                 'id': book['id'],

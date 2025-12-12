@@ -10,6 +10,10 @@ from huggingface_hub import hf_hub_download
 from recommend_lib.abs_api import get_all_items
 from sentence_transformers import SentenceTransformer
 from tokenizers import Tokenizer
+from defaults import DURATION_BUCKETS
+from db import LibraryStats, db
+import json
+from collections import Counter
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +52,81 @@ def get_rag_system() -> Optional['RAGSystem']:
         logger.warning("RAG System accessed before explicit initialization. Initializing now.")
         init_rag_system()
     return _RAG_INSTANCE
+
+
+
+def get_duration_bucket(duration_seconds: float) -> str:
+    """
+    Determines the duration bucket for a given duration.
+    
+    Args:
+        duration_seconds: Duration in seconds.
+        
+    Returns:
+        str: Bucket name.
+    """
+    if not duration_seconds:
+        return None
+        
+    for bucket, limits in DURATION_BUCKETS.items():
+        min_val = limits.get('min', 0)
+        max_val = limits.get('max', float('inf'))
+        
+        if min_val <= duration_seconds < max_val:
+            return bucket
+            
+    return None
+
+
+def format_duration(duration_seconds: float) -> str:
+    """
+    Formats the duration into rounded string representation.
+    
+    If < 1h: rounds to 15, 30, 45, 60 minutes.
+    If > 1h: minutes part rounds to 0, 15, 30, 45.
+    
+    Args:
+        duration_seconds: Duration in seconds
+        
+    Returns:
+        Formatted string (e.g. "30 minutes", "1 hours 15 minutes")
+    """
+    if not duration_seconds:
+        return ""
+    
+    minutes = duration_seconds / 60.0
+    
+    if minutes < 60:
+        if minutes <= 15:
+            return "15 minutes"
+        elif minutes <= 30:
+            return "30 minutes"
+        elif minutes <= 45:
+            return "45 minutes"
+        else:
+            return "1 hour"
+            
+    else:
+        hours = int(minutes // 60)
+        rem_minutes = minutes % 60
+        
+        rounded_rem = 0
+        if rem_minutes < 7.5:
+            rounded_rem = 0
+        elif rem_minutes < 22.5:
+            rounded_rem = 15
+        elif rem_minutes < 37.5:
+            rounded_rem = 30
+        elif rem_minutes < 52.5:
+            rounded_rem = 45
+        else:
+            hours += 1
+            rounded_rem = 0
+            
+        if rounded_rem == 0:
+            return f"{hours} hours"
+        else:
+            return f"{hours} hours {rounded_rem} minutes"
 
 
 class JinaEmbeddingFunction(embedding_functions.EmbeddingFunction):
@@ -117,10 +196,16 @@ class RAGSystem:
             model_repo=model_repo
         )
 
-        self.collection = self.client.get_or_create_collection(
-            name="audiobooks_v3_onnx",
+        self.content_collection = self.client.get_or_create_collection(
+            name="audiobooks_content_v1",
             embedding_function=self.embedding_fn
         )
+        
+        self.metadata_collection = self.client.get_or_create_collection(
+            name="audiobooks_metadata_v1",
+            embedding_function=self.embedding_fn
+        )
+        
         logger.info(f"RAG System initialized with ONNX model. Database path: {self.persist_directory}")
 
     def index_library(self, items_map: Dict[str, Dict]) -> int:
@@ -134,10 +219,12 @@ class RAGSystem:
             int: Number of new items indexed.
         """
         ids = []
-        documents = []
+        content_documents = []
+        metadata_documents = []
         metadatas = []
 
-        existing_ids = self.collection.get()["ids"]
+        # Check existing IDs in content collection (assuming they are synced)
+        existing_ids = self.content_collection.get()["ids"]
         
         count_new = 0
 
@@ -150,27 +237,44 @@ class RAGSystem:
             genres_str = ', '.join(genres) if genres else ''
             tags = item.get('tags', [])
             tags_str = ', '.join(tags) if tags else ''
+            
             series = item.get('series', '')
+            narrator = item.get('narrator', '')
             description = item.get('description', '')
+            duration_val = item.get('duration_seconds')
+            duration_str = format_duration(duration_val) if duration_val else ''
             
-            # Construct rich embedding text
-            parts = [f"{item['title']} by {item['author']}"]
+            # --- Content Embedding (About the book) ---
+            content_parts = []
             if genres_str:
-                parts.append(f"Genres: {genres_str}")
+                content_parts.append(f"Genres: {genres_str}")
             if tags_str:
-                parts.append(f"Tags: {tags_str}")
-            if series:
-                parts.append(f"Series: {series}")
+                content_parts.append(f"Tags: {tags_str}")
             if description:
-                parts.append(description)
+                content_parts.append(description)
             
-            text_to_embed = ". ".join(parts)
+            content_text = ". ".join(content_parts)
+            
+            # --- Metadata Embedding (Who/Structure) ---
+            metadata_parts = [f"{item['title']} by {item['author']}"]
+            if narrator and narrator != 'Unknown':
+                metadata_parts.append(f"Narrated by {narrator}")
+            if series:
+                metadata_parts.append(f"Series: {series}")
+            if series:
+                metadata_parts.append(f"Series: {series}")
+            # Duration removed from RAG embedding as per new logic
+
+            metadata_text = ". ".join(metadata_parts)
             
             ids.append(item_id)
-            documents.append(text_to_embed)
+            content_documents.append(content_text)
+            metadata_documents.append(metadata_text)
+            
             metadatas.append({
                 "title": item['title'],
                 "author": item['author'],
+                "narrator": narrator or '',
                 "genres": ','.join(genres) if genres else '',
                 "series": series or '',
                 "tags": ','.join(tags) if tags else ''
@@ -183,31 +287,86 @@ class RAGSystem:
             batch_size = 100
             for i in range(0, len(ids), batch_size):
                 end = min(i + batch_size, len(ids))
-                self.collection.add(
+                
+                # Add to content collection
+                self.content_collection.add(
                     ids=ids[i:end],
-                    documents=documents[i:end],
+                    documents=content_documents[i:end],
                     metadatas=metadatas[i:end]
                 )
+                
+                # Add to metadata collection
+                self.metadata_collection.add(
+                    ids=ids[i:end],
+                    documents=metadata_documents[i:end],
+                    metadatas=metadatas[i:end]
+                )
+                
             logger.info("Indexing complete.")
         else:
             logger.info("No new items to index.")
             
+            logger.info("No new items to index.")
+            
+        # --- Calculate and Save Library Stats (Duration Distribution) ---
+        try:
+             logger.info("Calculating library duration distribution...")
+             duration_counts = Counter()
+             total_items_with_duration = 0
+             
+             for item in items_map.values():
+                 dur = item.get('duration_seconds')
+                 bucket = get_duration_bucket(dur)
+                 if bucket:
+                     duration_counts[bucket] += 1
+                     total_items_with_duration += 1
+                     
+             distribution = {}
+             if total_items_with_duration > 0:
+                 for bucket in DURATION_BUCKETS:
+                     distribution[bucket] = duration_counts[bucket] / total_items_with_duration
+             else:
+                  # Fallback to uniform if empty library?
+                  for bucket in DURATION_BUCKETS:
+                      distribution[bucket] = 0.2
+                      
+             logger.info(f"Library Duration Distribution: { {k: round(v, 2) for k, v in distribution.items()} }")
+             
+             # Save to DB
+             # We need to be in an app context for this, which we should be if called from app
+             from flask import current_app
+             if current_app:
+                  stats_entry = LibraryStats.query.filter_by(key='duration_distribution').first()
+                  if not stats_entry:
+                      stats_entry = LibraryStats(key='duration_distribution')
+                      db.session.add(stats_entry)
+                  
+                  stats_entry.value_json = json.dumps(distribution)
+                  db.session.commit()
+                  logger.info("Library stats saved to database.")
+                  
+        except Exception as e:
+             logger.error(f"Failed to calculate/save library stats: {e}")
+
         return count_new
 
-    def retrieve_similar(self, query_text: str, n_results: int = 5) -> List[str]:
+    def retrieve_similar(self, query_text: str, n_results: int = 5, collection_type: str = 'content') -> List[str]:
         """
         Retrieves similar items based on the query text.
 
         Args:
             query_text (str): Query text to search for similar items.
             n_results (int): Number of similar items to retrieve.
+            collection_type (str): 'content' or 'metadata'
 
         Returns:
             List[str]: List of IDs of similar items.
         """
+        
+        collection = self.content_collection if collection_type == 'content' else self.metadata_collection
 
         query_vec = self.embedding_fn.embed_query(query_text)
-        results = self.collection.query(
+        results = collection.query(
             query_embeddings=[query_vec],
             n_results=n_results
         )
@@ -215,39 +374,51 @@ class RAGSystem:
             return results['ids'][0]
         return []
 
-    def get_embeddings(self, ids: List[str]) -> List[List[float]]:
+    def get_embeddings(self, ids: List[str]) -> Dict[str, List[List[float]]]:
         """
-        Retrieves embeddings for the given IDs.
+        Retrieves embeddings for the given IDs from BOTH collections.
 
         Args:
             ids (List[str]): List of IDs to retrieve embeddings for.
 
         Returns:
-            List[List[float]]: List of embeddings for the given IDs.
+            Dict[str, List[List[float]]]: Dictionary with 'content' and 'metadata' keys containing lists of embeddings.
         """
 
-        if not ids: return []
-        results = self.collection.get(ids=ids, include=['embeddings'])
-        embeddings = results.get('embeddings')
-        if embeddings is not None and len(embeddings) > 0:
-            if hasattr(embeddings, 'tolist'): return embeddings.tolist()
-            return embeddings
-        return []
+        if not ids: return {'content': [], 'metadata': []}
+        
+        content_results = self.content_collection.get(ids=ids, include=['embeddings'])
+        metadata_results = self.metadata_collection.get(ids=ids, include=['embeddings'])
+        
+        def extract_embeddings(results):
+            embeddings = results.get('embeddings')
+            if embeddings is not None and len(embeddings) > 0:
+                if hasattr(embeddings, 'tolist'): return embeddings.tolist()
+                return embeddings
+            return []
 
-    def retrieve_by_embedding(self, query_embedding: List[float], n_results: int = 50) -> List[Tuple[str, float]]:
+        return {
+            'content': extract_embeddings(content_results),
+            'metadata': extract_embeddings(metadata_results)
+        }
+
+    def retrieve_by_embedding(self, query_embedding: List[float], n_results: int = 50, collection_type: str = 'content') -> List[Tuple[str, float]]:
         """
         Retrieves similar items based on the query embedding.
 
         Args:
             query_embedding (List[float]): Query embedding to search for similar items.
             n_results (int): Number of similar items to retrieve.
+            collection_type (str): 'content' or 'metadata'
 
         Returns:
             List[tuple[str, float]]: List of tuples containing IDs and distances of similar items.
         """
+        
+        collection = self.content_collection if collection_type == 'content' else self.metadata_collection
 
-        if self.collection.count() == 0: return []
-        results = self.collection.query(
+        if collection.count() == 0: return []
+        results = collection.query(
             query_embeddings=[query_embedding], 
             n_results=n_results,
             include=['documents', 'metadatas', 'distances']

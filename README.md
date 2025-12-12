@@ -76,14 +76,15 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
 ### Architecture
 -   **RAG System (`web_app/recommend_lib/rag.py`)**:
     -   Automatically downloads and caches the quantized Jina v3 ONNX model (~130MB) for fast, low-memory embedding.
-    -   Vector data is persisted in `rag_db_v2/`.
+    -   Vector data is persisted in `rag_db_v2/` using two collections (`content` and `metadata`).
 -   **Recommendation Logic**:
-    -   Unread books are ranked by their semantic similarity to your finished books (Mean Vector profile).
+    -   Unread books are ranked by their similarity to your finished books.
+    -   **Weighted Scoring**: Semantic content (60%) and structural metadata (40%) are evaluated separately.
     -   Scores are boosted by:
         -   **User Preferences**: Top authors and genres.
         -   **Collaborative Signals**: High ratings from similar users.
 
-See [RECOMMENDATION_ALGO.md](RECOMMENDATION_ALGO.md) for a deep dive into the algorithm.
+See [RECOMMENDATION_ALGO.md](docs/RECOMMENDATION_ALGO.md) for a deep dive into the algorithm.
 
 ## Roadmap
 
@@ -93,6 +94,7 @@ See [RECOMMENDATION_ALGO.md](RECOMMENDATION_ALGO.md) for a deep dive into the al
 - [x] Advanced RAG Integration
 - [x] Scoring system for your audiobooks (Listening History with 1-5 star ratings)
 - [x] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the LLM
+- [ ] A page for books in progress with the option to mark them as abandoned (also used for recommendations algorithm)
 - [ ] Docker containerization for easier deployment
 - [ ] Enhanced UI/UX design
 - [ ] ~~Additional filtering options (e.g., by genre, length, narrator)~~
