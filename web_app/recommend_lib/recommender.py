@@ -67,7 +67,7 @@ def rank_candidates(
     1. Query phase: Find candidates similar to positively-rated books (4-5★)
     2. Penalty phase: Demote candidates similar to negatively-rated books (1-2★)
 
-    Annotates books with '_rag_score' and '_match_reasons'.
+    Now splits query into Content (semantic) and Metadata (structural) matching.
 
     Args:
         unread_books (List[Dict]): List of unread books
@@ -111,55 +111,74 @@ def rank_candidates(
     logger.info(f"Rating categories: {len(positive_ids)} liked (4-5★), {len(negative_ids)} disliked (1-2★), {len(neutral_ids)} neutral")
     
     candidate_scores = Counter()
+    match_reasons = {} # book_id -> {set of reasons}
     
-    query_embeddings = []
-    log_prefix = ""
     
-    if positive_ids:
-        query_embeddings = rag.get_embeddings(positive_ids)
-        log_prefix = f"Phase 1: Querying with {len(positive_ids)} positively-rated books"
-    else:
-        all_ids = [book['id'] for book in finished_books if book.get('id')]
-        query_embeddings = rag.get_embeddings(all_ids)
-        log_prefix = f"Phase 1 (fallback): Querying with all {len(all_ids)} finished books"
-
-    if query_embeddings:
-        cluster_vectors = calculate_cluster_vectors(query_embeddings, max_clusters=MAX_CLUSTERS)
-        logger.info(f"{log_prefix} -> Generated {len(cluster_vectors)} clusters")
+    # --- Helper to process queries ---
+    def process_query_ids(ids, weight_multiplier=1.0, is_penalty=False):
+        if not ids: return
         
-        for i, vector in enumerate(cluster_vectors):
-            similar_items = rag.retrieve_by_embedding(vector, n_results=100)
+        embeddings_dict = rag.get_embeddings(ids)
+        
+        # Process Content
+        if embeddings_dict['content']:
+            content_clusters = calculate_cluster_vectors(embeddings_dict['content'], max_clusters=MAX_CLUSTERS)
+            logger.info(f"  -> Generated {len(content_clusters)} content clusters")
             
-            for idx, (sid, dist) in enumerate(similar_items):
-                
-                safe_dist = max(0.0, dist)
-                similarity = 1.0 - (safe_dist / 2.0)
-                
-                base_score = similarity * 100.0
-                
-                score_multiplier = 2.0 if positive_ids else 1.0
-                
-                candidate_scores[sid] += base_score * score_multiplier
-                
-    
-    # === PHASE 2: Penalize similarity to negatively-rated books ===
-    if negative_ids:
-        negative_embeddings = rag.get_embeddings(negative_ids)
-        if negative_embeddings:
-            logger.info(f"Phase 2: Penalizing similarity to {len(negative_ids)} negatively-rated books (individual embeddings)")
-            
-            for i, neg_vector in enumerate(negative_embeddings):
-                disliked_similar = rag.retrieve_by_embedding(neg_vector, n_results=50)
-                
-                for idx, (sid, dist) in enumerate(disliked_similar):
+            for vector in content_clusters:
+                similar_items = rag.retrieve_by_embedding(vector, n_results=100, collection_type='content')
+                for sid, dist in similar_items:
+                    # Content Sim
                     safe_dist = max(0.0, dist)
                     similarity = 1.0 - (safe_dist / 2.0)
                     
-                    if similarity > 0:
-                        penalty = similarity * 100.0 * 1.5
-                        candidate_scores[sid] -= penalty
+                    score = similarity * 100.0 * 0.6 * weight_multiplier # 60% weight for Content
+                    
+                    if is_penalty:
+                         candidate_scores[sid] -= score * 1.5
+                    else:
+                         candidate_scores[sid] += score
+                         if score > 10:
+                             if sid not in match_reasons: match_reasons[sid] = set()
+                             match_reasons[sid].add("Content Match")
 
-            logger.info("Applied penalties based on negative ratings")
+
+        # Process Metadata
+        if embeddings_dict['metadata']:
+            meta_clusters = calculate_cluster_vectors(embeddings_dict['metadata'], max_clusters=MAX_CLUSTERS)
+            logger.info(f"  -> Generated {len(meta_clusters)} metadata clusters")
+            
+            for vector in meta_clusters:
+                similar_items = rag.retrieve_by_embedding(vector, n_results=100, collection_type='metadata')
+                for sid, dist in similar_items:
+                    # Metadata Sim
+                    safe_dist = max(0.0, dist)
+                    similarity = 1.0 - (safe_dist / 2.0)
+                    
+                    score = similarity * 100.0 * 0.4 * weight_multiplier # 40% weight for Metadata
+                    
+                    if is_penalty:
+                         candidate_scores[sid] -= score * 1.5
+                    else:
+                         candidate_scores[sid] += score
+                         if score > 10:
+                             if sid not in match_reasons: match_reasons[sid] = set()
+                             match_reasons[sid].add("Metadata Match")
+
+    # --- Phase 1: Positive ---
+    if positive_ids:
+        logger.info(f"Phase 1: Querying with {len(positive_ids)} positively-rated books")
+        process_query_ids(positive_ids, weight_multiplier=2.0)
+    else:
+        all_ids = [book['id'] for book in finished_books if book.get('id')]
+        logger.info(f"Phase 1 (fallback): Querying with all {len(all_ids)} finished books")
+        process_query_ids(all_ids, weight_multiplier=1.0)
+        
+    # --- Phase 2: Negative ---
+    if negative_ids:
+         logger.info(f"Phase 2: Penalizing {len(negative_ids)} negative books")
+         process_query_ids(negative_ids, weight_multiplier=1.0, is_penalty=True)
+
 
     ranked_books = []
 
@@ -192,6 +211,14 @@ def rank_candidates(
             reasons.append("Matches your reading profile")
         elif match_score < -50:
             reasons.append("Note: Similar to books you disliked")
+            
+        specific_reasons = match_reasons.get(book_id, set())
+        if "Content Match" in specific_reasons and "Metadata Match" in specific_reasons:
+             reasons.append("Strong Content & Style Match")
+        elif "Content Match" in specific_reasons:
+             reasons.append("Content Match")
+        elif "Metadata Match" in specific_reasons:
+             reasons.append("Style/Author Match")
         
         book['_match_reasons'] = reasons
         
@@ -393,7 +420,7 @@ def calculate_max_cluster_similarity(clusters_a: List[List[float]], clusters_b: 
 
 
 def get_collaborative_recommendations(
-    current_user_clusters: List[List[float]], 
+    current_user_ids: List[str],
     current_user_id: str, 
     items_map: Dict,
     rag_system
@@ -402,7 +429,7 @@ def get_collaborative_recommendations(
     Finds the most similar user and returns their top recommendations.
 
     Args:
-        current_user_clusters: List of cluster vectors for the current user
+        current_user_ids: List of book IDs representing the current user's history/likes
         current_user_id: ID of the current user
         items_map: Dictionary mapping book_id -> book object
         rag_system: RAG system for generating recommendations
@@ -416,8 +443,19 @@ def get_collaborative_recommendations(
     best_similarity = -1.0
 
     most_similar_user = None
-    most_similar_mean_vector = None
+    most_similar_clusters = {'content': [], 'metadata': []}
     
+    if not current_user_ids:
+        return [], None, 0.0
+
+    # Get my embeddings
+    my_embeddings = rag_system.get_embeddings(current_user_ids)
+    if not my_embeddings['content'] and not my_embeddings['metadata']:
+        return [], None, 0.0
+        
+    my_content_clusters = calculate_cluster_vectors(my_embeddings['content'], max_clusters=5)
+    my_metadata_clusters = calculate_cluster_vectors(my_embeddings['metadata'], max_clusters=5)
+
     logger.info(f"Checking {len(all_users)} users for collaborative filtering...")
     
     for user in all_users:
@@ -437,49 +475,46 @@ def get_collaborative_recommendations(
         if not valid_ids:
             continue
 
-        embeddings = rag_system.get_embeddings(valid_ids)
-
-        if not embeddings:
-            continue
-            
-        user_cluster_vectors = calculate_cluster_vectors(embeddings, max_clusters=5)
+        their_embeddings = rag_system.get_embeddings(valid_ids)
         
-        matching_vectors = []
-        max_user_sim = 0.0
+        # Calculate similarities
+        content_sim = 0.0
+        metadata_sim = 0.0
         
-        for their_vec in user_cluster_vectors:
-            # Check if this cluster matches any of my clusters
-            best_match_score = 0.0
-            for my_vec in current_user_clusters:
-                sim = cosine_similarity(my_vec, their_vec)
-                if sim > best_match_score:
-                    best_match_score = sim
-            
-            if best_match_score > max_user_sim:
-                max_user_sim = best_match_score
-            
-            # If this cluster is similar enough to one of mine, include it
-            if best_match_score > 0.6: # Configurable threshold
-                matching_vectors.append(their_vec)
+        if their_embeddings['content']:
+             their_content_clusters = calculate_cluster_vectors(their_embeddings['content'], max_clusters=5)
+             content_sim = calculate_max_cluster_similarity(my_content_clusters, their_content_clusters)
+             
+        if their_embeddings['metadata']:
+             their_metadata_clusters = calculate_cluster_vectors(their_embeddings['metadata'], max_clusters=5)
+             metadata_sim = calculate_max_cluster_similarity(my_metadata_clusters, their_metadata_clusters)
         
-        if max_user_sim > best_similarity:
-            best_similarity = max_user_sim
+        # Combined Similarity (Average)
+        total_sim = (content_sim + metadata_sim) / 2.0
+        
+        if total_sim > best_similarity:
+            best_similarity = total_sim
             most_similar_user = user
-            # ONLY store the clusters that matched
-            most_similar_mean_vector = matching_vectors 
+            most_similar_clusters = {
+                'content': their_content_clusters if their_embeddings['content'] else [],
+                'metadata': their_metadata_clusters if their_embeddings['metadata'] else []
+            }
             
-    if most_similar_user and best_similarity > 0.5 and most_similar_mean_vector: 
+    if most_similar_user and best_similarity > 0.5: 
 
         logger.info(f"Most similar user found: {most_similar_user.get('username')} with score {best_similarity}")
-        logger.info(f"Using {len(most_similar_mean_vector)} matching clusters for cross-recommendation.")
         
         similar_ids_set = set()
         
-        # Iterate over their matching clusters to get books
-        for vector in most_similar_mean_vector:
-             items = rag_system.retrieve_by_embedding(vector, n_results=20)
-             similar_ids_set.update([item[0] for item in items])
-             
+        # Helper to retrieve from clusters
+        def retrieve_from_clusters(clusters, type_):
+             for vector in clusters:
+                 items = rag_system.retrieve_by_embedding(vector, n_results=10, collection_type=type_)
+                 similar_ids_set.update([item[0] for item in items])
+                 
+        retrieve_from_clusters(most_similar_clusters['content'], 'content')
+        retrieve_from_clusters(most_similar_clusters['metadata'], 'metadata')
+
         similar_ids = list(similar_ids_set)
 
         collab_candidates = []
@@ -611,6 +646,8 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
     ratings_map = get_user_ratings(user_id) if user_id else {}
     
     # Get positive-rated book IDs
+    target_ids = []
+    
     positive_ids = []
     for book in finished_books_list:
         book_id = book.get('id')
@@ -621,17 +658,14 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
     
     # Use positive books if available, otherwise fall back to all
     if positive_ids:
-        current_embeddings = rag.get_embeddings(positive_ids)
+        target_ids = positive_ids
     else:
-        current_seed_ids = [book['id'] for book in finished_books_list if book.get('id')]
-        current_embeddings = rag.get_embeddings(current_seed_ids)
+        target_ids = [book['id'] for book in finished_books_list if book.get('id')]
     
-    if current_embeddings:
-        # Calculate clusters for me
-        current_user_clusters = calculate_cluster_vectors(current_embeddings, max_clusters=5)
+    if target_ids:
         
         collab_recs, similar_user, similarity_score = get_collaborative_recommendations(
-            current_user_clusters, 
+            target_ids, 
             user_id if user_id else "me",
             items_map,
             rag

@@ -30,31 +30,37 @@ Before any ranking occurs, the system compiles a list of valid candidate books.
 
 ## 2. RAG-Based Scoring (The Core)
 
-The core mechanism uses **Vector Embeddings** to understand semantic similarity between books.
+The core mechanism uses **Vector Embeddings** to understand similarity between books. In v2, this has been upgraded to a **Two-Stream** approach to separate "what a book is about" from "who made it."
 
 ### The RAG System
--   **Embeddings**: Uses `jina-embeddings-v3` (via ONNX) to convert book metadata (Title, Author, Genres, Tags, Series, Description, and **Duration**) into high-dimensional vectors.
-    -   **Duration Handling**: To group books of similar lengths, duration is rounded and added to the embedding text:
-        -   **< 1 hour**: Rounded to 15, 30, 45, or 60 minutes.
-        -   **> 1 hour**: Minutes part is rounded to 0, 15, 30, or 45 (e.g., "1 hour 10 mins" becomes "1 hours 15 minutes").
--   **Vector Store**: Stores these embeddings in a **ChromaDB** collection (`audiobooks_v3_onnx`).
+The system maintains two distinct vector collections in **ChromaDB**:
+
+1.  **Content Collection** (`audiobooks_content_v1`):
+    -   **Purpose**: Semantic matching of plot, mood, and themes.
+    -   **Input**: Genres + Tags + Description.
+    -   **Weight**: **60%** of the matching score.
+
+2.  **Metadata Collection** (`audiobooks_metadata_v1`):
+    -   **Purpose**: Structural matching of creators and format.
+    -   **Input**: Title + Author + Narrator + Series + Duration (rounded).
+    -   **Weight**: **40%** of the matching score.
 
 ### Ranking Algorithm
 The system ranks unread books using a **Two-Phase** approach based on user ratings (1-5 stars).
 
 #### Phase 1: The "Like" Query
-1.  **Seed Selection**: Identifies books the user rated **4 or 5 stars**. If no positive ratings exist, it falls back to *all* finished books.
-2.  **Clustering (Taste Profiles)**: Instead of averaging all liked books into a single "mean vector" (which dilutes distinct tastes), the system performs **K-Means Clustering** (max 5 clusters) on the seed embeddings. This identifies distinct "clusters" of interest (e.g., "Sci-Fi Space Opera" vs. "Cozy Mystery").
-3.  **Retrieval**: The system queries the Vector Store for books similar to *each* cluster center.
-4.  **Scoring**:
-    -   Similarity translates to a base score (0-100).
-    -   Books found via "Positive" ratings get a **2.0x multiplier**.
-    -   Scores are **accumulative**: If a book matches multiple user taste clusters, its score increases.
+1.  **Seed Selection**: Identifies books the user rated **4-5 stars**.
+2.  **Dual Clustering**:
+    -   Clusters **Content embeddings** to find preferred plots (e.g., "Space Opera").
+    -   Clusters **Metadata embeddings** to find preferred styles (e.g., "Long epics by Brandon Sanderson").
+3.  **Weighted Retrieval**: 
+    -   Queries both collections independently.
+    -   Combines scores: `Total Score = (ContentMatch * 0.6) + (MetadataMatch * 0.4)`.
+4.  **Multipliers**: Books found via "Positive" ratings get a **2.0x multiplier**.
 
 #### Phase 2: The "Dislike" Penalty
-1.  **Seed Selection**: Identifies books the user rated **1 or 2 stars**.
-2.  **Retrieval**: Finds books semantically similar to these negative examples.
-3.  **Penalty**: Applies a **negative score** (1.5x weight) to these candidates, effectively pushing them down or off the list.
+1.  **Seed Selection**: Identifies books the user rated **1-2 stars**.
+2.  **Penalty**: Finds books similar in Content or Metadata to disliked items and applies a **negative score** (1.5x penalty).
 
 ## 3. User Preference Boosting
 

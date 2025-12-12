@@ -76,9 +76,10 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
 ### Architecture
 -   **RAG System (`web_app/recommend_lib/rag.py`)**:
     -   Automatically downloads and caches the quantized Jina v3 ONNX model (~130MB) for fast, low-memory embedding.
-    -   Vector data is persisted in `rag_db_v2/`.
+    -   Vector data is persisted in `rag_db_v2/` using two collections (`content` and `metadata`).
 -   **Recommendation Logic**:
-    -   Unread books are ranked by their semantic similarity to your finished books (Mean Vector profile).
+    -   Unread books are ranked by their similarity to your finished books.
+    -   **Weighted Scoring**: Semantic content (60%) and structural metadata (40%) are evaluated separately.
     -   Scores are boosted by:
         -   **User Preferences**: Top authors and genres.
         -   **Collaborative Signals**: High ratings from similar users.
