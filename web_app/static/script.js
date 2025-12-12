@@ -77,6 +77,33 @@ document.addEventListener('DOMContentLoaded', () => {
         socket.emit('get_recommendations', { refresh: refresh });
     }
 
+    const forceSyncBtn = document.getElementById('force-sync-btn');
+    if (forceSyncBtn) {
+        forceSyncBtn.addEventListener('click', async () => {
+            if (!confirm('Are you sure you want to force sync the library? This might take a while.')) return;
+
+            const originalText = forceSyncBtn.textContent;
+            forceSyncBtn.disabled = true;
+            forceSyncBtn.textContent = 'Syncing...';
+
+            try {
+                const response = await fetch('/api/admin/force-sync', { method: 'POST' });
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Sync triggered successfully!');
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Request failed: ' + err.message);
+            } finally {
+                forceSyncBtn.disabled = false;
+                forceSyncBtn.textContent = originalText;
+            }
+        });
+    }
+
     generateBtn.addEventListener('click', () => fetchRecommendations(true));
 
     // Initial fetch on load

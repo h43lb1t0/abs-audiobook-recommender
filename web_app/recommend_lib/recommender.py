@@ -4,15 +4,14 @@ import os
 from collections import Counter
 from typing import Dict, List, Set, Tuple
 
-from db import UserLib
+from db import User, UserLib
+from defaults import *
 from dotenv import load_dotenv
-from recommend_lib.abs_api import get_abs_users, get_all_items, get_finished_books
+from recommend_lib.abs_api import (get_abs_users, get_all_items,
+                                   get_finished_books)
 from recommend_lib.llm import generate_book_recommendations
 from recommend_lib.rag import get_rag_system
 from sklearn.cluster import KMeans
-
-
-logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +98,7 @@ def rank_candidates(
         book_id = book.get('id')
         if not book_id:
             continue
-        rating = ratings_map.get(book_id, 3)  # Default to neutral
+        rating = ratings_map.get(book_id, DEFAULT_RATING)  # Default to neutral
         if rating >= 4:
             positive_ids.append(book_id)
         elif rating <= 2:
@@ -123,21 +122,13 @@ def rank_candidates(
         log_prefix = f"Phase 1 (fallback): Querying with all {len(all_ids)} finished books"
 
     if query_embeddings:
-        cluster_vectors = calculate_cluster_vectors(query_embeddings, max_clusters=5)
+        cluster_vectors = calculate_cluster_vectors(query_embeddings, max_clusters=MAX_CLUSTERS)
         logger.info(f"{log_prefix} -> Generated {len(cluster_vectors)} clusters")
         
         for i, vector in enumerate(cluster_vectors):
             similar_items = rag.retrieve_by_embedding(vector, n_results=100)
             
             for idx, (sid, dist) in enumerate(similar_items):
-                # Calculate similarity score from distance
-                # So CosineSimilarity = 1 - Distance/2
-                # Range of Distance is 0 to 4. 0 is identical.
-                
-                # Convert to 0-100 scale
-                # Similarity 1.0 -> 100
-                # Similarity 0.0 -> 0
-                # Similarity -1.0 -> -100
                 
                 safe_dist = max(0.0, dist)
                 similarity = 1.0 - (safe_dist / 2.0)
@@ -180,10 +171,10 @@ def rank_candidates(
 
         for genre in book.get('genres', []):
             if genre in top_genres:
-                pref_score += 10 # Boost genres
+                pref_score += RECOMMENDATION_BOOST['GENRE'] # Boost genres
 
         if book.get('author', '') in top_authors:
-            pref_score += 15 # Boost authors
+            pref_score += RECOMMENDATION_BOOST['AUTHOR'] # Boost authors
             
         total_score = match_score + pref_score
         
@@ -295,7 +286,7 @@ def calculate_weighted_user_vector(
     
     for emb, book_id in zip(embeddings, book_ids):
         # Get rating weight, default to 3 stars (neutral) if unrated
-        rating = ratings_map.get(book_id, 3)
+        rating = ratings_map.get(book_id, DEFAULT_RATING)
         weight = RATING_WEIGHTS.get(rating, 0.0)
         
         # Track counts for logging
@@ -511,13 +502,21 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
         List[Dict[str, str]]: The recommendations
     """
 
-    logger.info(f"Getting recommendations for user_id: {user_id}")
+    if user_id is None:
+        raise ValueError("User ID is required")
+        return []
+
+    user = User.query.get(user_id)
+
+    if not user:
+        raise ValueError("User not found")
+        return []
+
+    logger.info(f"Getting recommendations for user: {user.username}")
 
     items_map, series_counts = get_all_items()
     
     rag = get_rag_system()
-
-    rag.index_library(items_map)
 
     finished_ids, in_progress_ids, finished_keys = get_finished_books(items_map, user_id)
     
@@ -584,8 +583,8 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
 
         author_counts[book.get('author', '')] += 1
     
-    top_genres = set(g for g, _ in genre_counts.most_common(5))
-    top_authors = set(a for a, _ in author_counts.most_common(5))
+    top_genres = set(g for g, _ in genre_counts.most_common(MOST_COMMON_GENRES))
+    top_authors = set(a for a, _ in author_counts.most_common(MOST_COMMON_AUTHORS))
     
     logger.info(f"User preferences - Top genres: {top_genres}, Top authors: {top_authors}")
     
@@ -605,7 +604,7 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
     for book in finished_books_list:
         book_id = book.get('id')
         if book_id:
-            rating = ratings_map.get(book_id, 3)
+            rating = ratings_map.get(book_id, DEFAULT_RATING)
             if rating >= 4:
                 positive_ids.append(book_id)
     
@@ -634,7 +633,7 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
             
             for book in ranked_candidates:
                 if book['id'] in collab_ids:
-                    boost_amount = 15 * similarity_score # Moderate boost (was 50)
+                    boost_amount = 15 * similarity_score
                     book['_rag_score'] += boost_amount
 
                     if '_match_reasons' not in book:

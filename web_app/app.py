@@ -1,27 +1,34 @@
-from flask import Flask, jsonify, send_from_directory, request, Response, render_template, redirect, url_for, flash
-import os
-import requests
-import logging
 import json
+import logging
+import os
 from datetime import datetime
+
+import requests
+from background_tasks import scheduled_indexing, scheduled_user_activity_check
+from db import User, UserLib, UserRecommendations, db
+from defaults import *
 from dotenv import load_dotenv
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask_socketio import SocketIO, emit
-
+from flask import (Flask, Response, flash, jsonify, redirect, render_template,
+                   request, url_for)
+from flask_apscheduler import APScheduler
+from flask_login import (LoginManager, current_user, login_required,
+                         login_user, logout_user)
+from flask_socketio import SocketIO, emit, join_room
+from logger_conf import setup_logging
+from recommend_lib.abs_api import (get_abs_users, get_all_items,
+                                   get_finished_books)
+from recommend_lib.rag import get_rag_system, init_rag_system
 from recommend_lib.recommender import get_recommendations
-from recommend_lib.rag import init_rag_system
+from sqlalchemy import inspect, text
+from werkzeug.security import check_password_hash, generate_password_hash
 
-logging.basicConfig(level=logging.INFO)
+setup_logging()
 logger = logging.getLogger(__name__)
-from recommend_lib.abs_api import get_abs_users, get_all_items, get_finished_books
-from db import db, User, UserLib, UserRecommendations
-
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key") # Needed for sessions
-socketio = SocketIO(app)
+socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
 
 ABS_URL = os.getenv("ABS_URL")
 ABS_TOKEN = os.getenv("ABS_TOKEN")
@@ -33,6 +40,10 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 logger.debug(f"Database path: {db_path}")
 
 db.init_app(app)
+
+scheduler = APScheduler()
+scheduler.init_app(app)
+scheduler.start()
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -47,7 +58,26 @@ def init_db():
         # Ensure instance directory exists
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         db.create_all()
+        
+        # Ensure root user exists
+        root_user = db.session.get(User, 'root')
+        if not root_user:
+            logger.info("Creating root user...")
+            root_password = os.getenv('ROOT_PASSWORD', 'admin')
+            hashed_root_pw = generate_password_hash(root_password)
+            new_root = User(
+                id='root',
+                username='root',
+                password=hashed_root_pw
+            )
+            db.session.add(new_root)
+            db.session.commit()
+            logger.info("Root user created.")
+            
         sync_abs_users()
+
+
+
 
 def sync_abs_users():
     """Syncs users from ABS to the local database."""
@@ -70,13 +100,6 @@ def sync_abs_users():
                 logger.info(f"Updating existing user: {abs_user['username']}")
                 # Update username if changed
                 user.username = abs_user['username']
-                
-                # Check if the current password is the plain text username (migration/first run with existing db)
-                if user.password == abs_user['username']:
-                     logger.debug(f"Migrating password for {user.username} to hash.")
-                     user.password = generate_password_hash(abs_user['username'])
-                
-                # If the password is NOT the username, we assume the user changed it, so we DO NOT overwrite it.
         
         db.session.commit()
         logger.info("Synced users from ABS.")
@@ -95,15 +118,8 @@ def login():
         
         if user:
             logger.debug(f"User found: {user.username}, ID: {user.id}")
-            # Check if password matches hash OR if it matches plain text (backward compatibility during migration)
-            if check_password_hash(user.password, password) or user.password == password:
+            if check_password_hash(user.password, password):
                 logger.debug("Password match. Logging in.")
-
-                # If it matched plain text, upgrade to hash immediately
-                if user.password == password:
-                     logger.debug("Upgrading plain text password to hash on login.")
-                     user.password = generate_password_hash(password)
-                     db.session.commit()
 
                 login_user(user)
                 return redirect(url_for('index'))
@@ -168,6 +184,7 @@ def get_listening_history():
         items_map, _ = get_all_items()
         finished_ids, _, _ = get_finished_books(items_map, user_id=current_user.id)
         
+        
         # Get user's ratings from database
         user_ratings = UserLib.query.filter_by(user_id=current_user.id).all()
         ratings_map = {r.book_id: r.rating for r in user_ratings}
@@ -231,11 +248,10 @@ def rate_book():
         
         if existing:
             existing.rating = rating
+            existing.updated_at = datetime.now().isoformat()
+            db.session.commit()
         else:
-            new_entry = UserLib(user_id=current_user.id, book_id=book_id, rating=rating)
-            db.session.add(new_entry)
-        
-        db.session.commit()
+            return jsonify({"error": "Book not found in library"}), 404
         return jsonify({"success": True, "book_id": book_id, "rating": rating})
     except Exception as e:
         logger.error(f"Error saving rating: {e}")
@@ -300,6 +316,17 @@ def recommend():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@socketio.on('connect')
+def handle_connect():
+    """
+    Handle new websocket connection
+    """
+    if current_user.is_authenticated:
+        logger.info(f"User {current_user.id} connected to websocket. Joining room {current_user.id}")
+        join_room(current_user.id)
+    else:
+        logger.info("Anonymous user connected to websocket")
 
 @socketio.on('get_recommendations')
 def handle_get_recommendations(data):
@@ -376,7 +403,49 @@ def proxy_cover(item_id):
                
     return Response(resp.content, resp.status_code, headers)
 
+
+
+scheduler.add_job(
+    id='scheduled_user_activity_check',
+    func=scheduled_user_activity_check,
+    trigger='interval',
+    minutes=BACKGROUND_TASKS['CREATE_RECOMMENDATIONS_INTERVAL'],
+    args=[app, socketio]
+)
+
+scheduler.add_job(
+    id='scheduled_indexing', 
+    func=scheduled_indexing, 
+    trigger='interval', 
+    hours=BACKGROUND_TASKS['CHECK_NEW_BOOKS_INTERVAL'],
+    args=[app]
+)
+
+@app.route('/api/admin/force-sync', methods=['POST'])
+@login_required
+def force_sync():
+    """
+    Force triggers the library indexing (Root only)
+    """
+    if current_user.id != 'root':
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    try:
+        logger.info("Force sync triggered by root user.")
+        items_map, _ = get_all_items()
+        rag = get_rag_system()
+        rag.index_library(items_map)
+        return jsonify({"status": "success", "message": "Indexing triggered"})
+    except Exception as e:
+        logger.error(f"Error in force sync: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/debug/force-check')
+def debug_force_check():
+    scheduled_user_activity_check(app, socketio)
+    return "Check triggered"
+
 if __name__ == '__main__':
     init_db()
     init_rag_system()
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=False)

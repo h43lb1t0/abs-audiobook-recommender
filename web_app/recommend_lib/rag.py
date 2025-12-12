@@ -123,12 +123,15 @@ class RAGSystem:
         )
         logger.info(f"RAG System initialized with ONNX model. Database path: {self.persist_directory}")
 
-    def index_library(self, items_map: Dict[str, Dict]) -> None:
+    def index_library(self, items_map: Dict[str, Dict]) -> int:
         """
         Indexes the library items into ChromaDB.
 
         Args:
             items_map (Dict[str, Dict]): Map of item IDs to item data.
+            
+        Returns:
+            int: Number of new items indexed.
         """
         ids = []
         documents = []
@@ -188,6 +191,8 @@ class RAGSystem:
             logger.info("Indexing complete.")
         else:
             logger.info("No new items to index.")
+            
+        return count_new
 
     def retrieve_similar(self, query_text: str, n_results: int = 5) -> List[str]:
         """

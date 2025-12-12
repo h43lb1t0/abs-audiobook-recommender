@@ -1,11 +1,12 @@
-import os
-import requests
 import json
 import logging
-from dotenv import load_dotenv
+import os
 import re
+from datetime import datetime
 from typing import Tuple
 
+import requests
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +126,7 @@ def get_all_items() -> Tuple[dict, dict]:
             }
             with open('items_map.json', 'w', encoding='utf-8') as f:
                 json.dump(items_map, f, ensure_ascii=False, indent=4)
-            logger.debug(f"Added item {item['id']} to items_map with description: {items_map[item['id']]['description']}")
+
 
             if not items_map[item['id']]['author'] or items_map[item['id']]['author'] == 'Unknown':
                 authors = metadata.get('authors', [])
@@ -136,9 +137,14 @@ def get_all_items() -> Tuple[dict, dict]:
 
 
 
+from db import UserLib, db
+
+
 def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, set]:
     """
     Returns the finished books from ABS (books count as finished if they are finished or if they are 97% read)
+    
+    Also saves/updates the progress to the local UserLib table.
 
     Args:
         items_map (dict): The items map
@@ -162,19 +168,46 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
     except requests.exceptions.RequestException as e:
         logger.error(f"Error fetching user data: {e}")
         return set(), set(), set()
-
-    # The user object structure is the same for /api/me and /api/users/{id}
-    # However, /api/users/{id} might return the user object directly or wrapped.
-    # Based on get_abs_users, /api/users returns { users: [...] }
-    # Usually /api/users/{id} returns the user object directly.
     
-    # Let's assume it returns the user object directly which contains mediaProgress.
+    
     media_progress = user_data.get('mediaProgress', [])
     
     finished_ids = set()
     in_progress_ids = set()
 
     finished_keys = set()
+    
+    # Identify the user ID to save to DB
+    current_user_id = user_id
+    if not current_user_id:
+        current_user_id = user_data.get('id')
+
+    # Prepare for DB update if we have a user ID and are in an app context
+    should_sync_db = False
+    
+    if current_user_id:
+        try:
+             # Check if we are in an app context (db.session works)
+             from flask import current_app
+             if current_app:
+                 should_sync_db = True
+        except ImportError:
+             pass
+        except RuntimeError:
+             # working outside of application context
+             pass
+
+    user_lib_map = {}
+    if should_sync_db:
+        try:
+             existing_entries = UserLib.query.filter_by(user_id=current_user_id).all()
+             user_lib_map = {entry.book_id: entry for entry in existing_entries}
+        except Exception as e:
+             logger.error(f"Error fetching UserLib entries for syncing: {e}")
+             should_sync_db = False
+
+    # First pass: Determine the final status for each item, handling duplicates
+    final_status_map = {} # item_id -> status
 
     for mp in media_progress:
         item_id = mp.get('libraryItemId')
@@ -183,15 +216,59 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
         progress = mp.get('progress', 0.0)
 
         currentTime = mp.get('currentTime', 0.0)
+        
+        status = None
 
         if is_finished or progress >= 0.97:
+            # Also add to return sets
             finished_ids.add(item_id)
+            status = 'finished'
             if item_id in items_map:
                 book = items_map[item_id]
                 finished_keys.add((book['title'], book['author']))
                 
         elif progress > 0 or currentTime > 0:
             in_progress_ids.add(item_id)
+            status = 'reading'
+
+        if status:
+            if item_id in final_status_map:
+                # Conflict resolution: finished > reading
+                if final_status_map[item_id] == 'reading' and status == 'finished':
+                    final_status_map[item_id] = 'finished'
+            else:
+                final_status_map[item_id] = status
+
+    # Sync to DB
+    if should_sync_db:
+        for item_id, status in final_status_map.items():
+            try:
+                if item_id in user_lib_map:
+                    entry = user_lib_map[item_id]
+                    if entry.status != status:
+                        logger.debug(f"Updating status for item {item_id} from {entry.status} to {status}")
+                        entry.status = status
+                        entry.updated_at = datetime.now().isoformat()
+                else:
+                    new_entry = UserLib(
+                        user_id=current_user_id,
+                        book_id=item_id,
+                        status=status,
+                        rating=None,
+                        updated_at=datetime.now().isoformat()
+                    )
+                    db.session.add(new_entry)
+                    user_lib_map[item_id] = new_entry # Update local map
+            except Exception as e:
+                 logger.error(f"Error updating UserLib for item {item_id}: {e}")
+
+    if should_sync_db:
+        try:
+            db.session.commit()
+            logger.info(f"Synced UserLib progress for user {current_user_id}")
+        except Exception as e:
+            logger.error(f"Error committing UserLib changes: {e}")
+            db.session.rollback()
 
     return finished_ids, in_progress_ids, finished_keys
 
