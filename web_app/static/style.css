@@ -324,3 +324,8 @@ header p {
     margin-right: 0.25rem;
     vertical-align: middle;
 }
+
+.abandoned {
+    filter: grayscale(100%);
+    opacity: 0.5;
+}

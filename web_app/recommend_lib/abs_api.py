@@ -253,6 +253,11 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
                 if item_id in user_lib_map:
                     entry = user_lib_map[item_id]
                     if entry.status != status:
+                        # Don't overwrite abandoned status with reading status
+                        if entry.status == 'abandoned' and status == 'reading':
+                            logger.debug(f"Skipping status update for item {item_id}: keeping 'abandoned' despite 'reading' status from ABS")
+                            continue
+                            
                         logger.debug(f"Updating status for item {item_id} from {entry.status} to {status}")
                         entry.status = status
                         entry.updated_at = datetime.now().isoformat()

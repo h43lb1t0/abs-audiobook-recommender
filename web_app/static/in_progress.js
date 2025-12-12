@@ -136,12 +136,21 @@ document.addEventListener('DOMContentLoaded', () => {
                  I'll keep just the bar for now as per "make it the same width" focus. -->
         `;
 
+        if (book.status === 'abandoned') {
+            card.classList.add('abandoned');
+        }
+
+        const actionArea = book.status === 'abandoned'
+            ? `<button class="btn secondary" style="width: 100%; justify-content: center; margin-top: auto;" onclick="reactivateBook('${book.id}', this)">Reactivate</button>`
+            : `<button class="btn secondary" style="width: 100%; justify-content: center; margin-top: auto;" onclick="abandonBook('${book.id}', this)">Abandon</button>`;
+
         card.innerHTML = `
             <img src="${coverUrl}" alt="${escapeHtml(book.title)}" class="card-image" onerror="this.src='https://via.placeholder.com/300?text=No+Cover'">
             ${progressBar}
             <div class="card-content">
                 <h3 class="card-title">${sequenceLabel ? `<span class="sequence-badge">${sequenceLabel}</span> ` : ''}${escapeHtml(book.title)}</h3>
                 <div class="card-author">by ${escapeHtml(book.author || 'Unknown')}</div>
+                ${actionArea}
             </div>
         `;
 
@@ -154,4 +163,107 @@ document.addEventListener('DOMContentLoaded', () => {
         div.textContent = text;
         return div.innerHTML;
     }
+
+    // Expose abandonBook to global scope so onclick works
+    window.abandonBook = async function (bookId, btnElement) {
+        if (!confirm('Are you sure you want to abandon this book?')) {
+            return;
+        }
+
+        const originalText = btnElement.textContent;
+        btnElement.textContent = '...';
+        btnElement.disabled = true;
+
+        try {
+            const response = await fetch('/api/abandon-book', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ book_id: bookId })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'Failed to abandon book');
+            }
+
+            const data = await response.json();
+
+            if (data.success) {
+                // Update UI without reload
+                const card = btnElement.closest('.card');
+                if (card) {
+                    card.classList.add('abandoned');
+                    // Replace button with "Reactivate" button
+                    const parent = btnElement.parentNode;
+                    const newBtn = document.createElement('button');
+                    newBtn.className = 'btn secondary';
+                    newBtn.style.cssText = 'width: 100%; justify-content: center; margin-top: auto;';
+                    newBtn.textContent = 'Reactivate';
+                    newBtn.onclick = function () { window.reactivateBook(bookId, this); };
+
+                    btnElement.remove();
+                    parent.appendChild(newBtn);
+                }
+            }
+
+        } catch (error) {
+            alert(error.message);
+            btnElement.textContent = originalText;
+            btnElement.disabled = false;
+        }
+    };
+
+    // Expose reactivateBook to global scope
+    window.reactivateBook = async function (bookId, btnElement) {
+        if (!confirm('Are you sure you want to reactivate this book?')) {
+            return;
+        }
+
+        const originalText = btnElement.textContent;
+        btnElement.textContent = '...';
+        btnElement.disabled = true;
+
+        try {
+            const response = await fetch('/api/reactivate-book', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ book_id: bookId })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'Failed to reactivate book');
+            }
+
+            const data = await response.json();
+
+            if (data.success) {
+                // Update UI without reload
+                const card = btnElement.closest('.card');
+                if (card) {
+                    card.classList.remove('abandoned');
+                    // Replace button with "Abandon" button
+                    const parent = btnElement.parentNode;
+
+                    const newBtn = document.createElement('button');
+                    newBtn.className = 'btn secondary';
+                    newBtn.style.cssText = 'width: 100%; justify-content: center; margin-top: auto;';
+                    newBtn.textContent = 'Abandon';
+                    newBtn.onclick = function () { window.abandonBook(bookId, this); };
+
+                    btnElement.remove();
+                    parent.appendChild(newBtn);
+                }
+            }
+
+        } catch (error) {
+            alert(error.message);
+            btnElement.textContent = originalText;
+            btnElement.disabled = false;
+        }
+    };
 });

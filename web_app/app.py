@@ -263,8 +263,21 @@ def get_in_progress():
                     'series_sequence': book.get('series_sequence'),
                     'series_sequence_num': seq_num,
                     'cover': book.get('cover'), # Ensure cover is available if needed by frontend directly, usually handled by separate endpoint though
-                    'progress': progress
+                    'progress': progress,
+                    'status': 'reading' # Default to reading
                 })
+        
+        # Fetch local status overrides (e.g. abandoned)
+        user_lib_entries = UserLib.query.filter(
+            UserLib.user_id == current_user.id,
+            UserLib.book_id.in_([b['id'] for b in in_progress_books])
+        ).all()
+        
+        status_map = {e.book_id: e.status for e in user_lib_entries}
+        
+        for book in in_progress_books:
+            if book['id'] in status_map:
+                book['status'] = status_map[book['id']]
         
         # Sort: first by series name, then by sequence
         in_progress_books.sort(key=lambda x: (
@@ -300,6 +313,9 @@ def rate_book():
         
         # Check if rating already exists
         existing = UserLib.query.filter_by(user_id=current_user.id, book_id=book_id).first()
+
+        if existing.status == 'abandoned':
+            return jsonify({"error": "You cannot rate a book that you have abandoned"}), 400
         
         if existing:
             existing.rating = rating
@@ -324,6 +340,75 @@ def get_ratings():
         return jsonify(ratings)
     except Exception as e:
         logger.error(f"Error fetching ratings: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/abandon-book', methods=['POST'])
+@login_required
+def abandon_book():
+    """
+    Marks a book as abandoned.
+    """
+    try:
+        data = request.get_json()
+        book_id = data.get('book_id')
+        
+        if not book_id:
+            return jsonify({"error": "book_id is required"}), 400
+            
+        # Check if book exists in library
+        existing = UserLib.query.filter_by(user_id=current_user.id, book_id=book_id).first()
+        
+        if existing:
+            if existing.status == 'finished':
+                 return jsonify({"error": "Cannot abandon a finished book"}), 400
+                 
+            existing.status = 'abandoned'
+            existing.updated_at = datetime.now().isoformat()
+            db.session.commit()
+            return jsonify({"success": True, "book_id": book_id, "status": "abandoned"})
+        else:
+            # If not in local lib, create it (edge case if not synced yet but in progress)
+            # However, typically it should be synced if it's in progress.
+            # We'll create it with abandoned status.
+            new_entry = UserLib(
+                user_id=current_user.id,
+                book_id=book_id,
+                status='abandoned',
+                updated_at=datetime.now().isoformat()
+            )
+            db.session.add(new_entry)
+            db.session.commit()
+            return jsonify({"success": True, "book_id": book_id, "status": "abandoned"})
+            
+    except Exception as e:
+        logger.error(f"Error abandoning book: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/reactivate-book', methods=['POST'])
+@login_required
+def reactivate_book():
+    """
+    Marks a book as reading (reactivates an abandoned book).
+    """
+    try:
+        data = request.get_json()
+        book_id = data.get('book_id')
+        
+        if not book_id:
+            return jsonify({"error": "book_id is required"}), 400
+            
+        existing = UserLib.query.filter_by(user_id=current_user.id, book_id=book_id).first()
+        
+        if existing:
+            existing.status = 'reading'
+            existing.updated_at = datetime.now().isoformat()
+            db.session.commit()
+            return jsonify({"success": True, "book_id": book_id, "status": "reading"})
+        else:
+            return jsonify({"error": "Book not found in library"}), 404
+            
+    except Exception as e:
+        logger.error(f"Error reactivating book: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/recommend')
