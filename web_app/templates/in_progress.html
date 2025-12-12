@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Listening History - Audiobook Recommendations</title>
+    <title>In Progress - Audiobook Recommendations</title>
     <link rel="stylesheet" href="/static/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
@@ -13,29 +13,25 @@
     <div class="container">
         <header>
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h1>Listening History</h1>
+                <h1>In Progress</h1>
                 <div>
-                    <a href="{{ url_for('index') }}" class="btn secondary"
-                        style="width: auto; margin: 0; margin-right: 10px;">Recommendations</a>
-                    <a href="{{ url_for('in_progress') }}" class="btn secondary"
-                        style="width: auto; margin: 0; margin-right: 10px;">In Progress</a>
-                    <a href="{{ url_for('change_password') }}" class="btn secondary"
-                        style="width: auto; margin: 0; margin-right: 10px;">Change Password</a>
+                    <a href="{{ url_for('index') }}" class="btn secondary" style="width: auto; margin: 0; margin-right: 10px;">Recommendations</a>
+                    <a href="{{ url_for('listening_history') }}" class="btn secondary" style="width: auto; margin: 0; margin-right: 10px;">My History</a>
+                    <a href="{{ url_for('change_password') }}" class="btn secondary" style="width: auto; margin: 0; margin-right: 10px;">Change Password</a>
                     <a href="{{ url_for('logout') }}" class="btn secondary" style="width: auto; margin: 0;">Logout</a>
                 </div>
             </div>
-            <p>All the audiobooks you've finished. Rate them to improve future recommendations.</p>
+            <p>Books you are currently reading.</p>
         </header>
 
         <main>
             <div id="loading" class="loading-container">
                 <span class="loader"></span>
-                <span>Loading your listening history...</span>
+                <span>Loading your in-progress books...</span>
             </div>
 
             <div id="stats" class="stats-bar hidden">
                 <span id="book-count">0 books</span>
-                <span id="rated-count">0 rated</span>
             </div>
 
             <div id="results" class="hidden">
@@ -45,7 +41,7 @@
             <div id="error-message" class="error hidden"></div>
         </main>
     </div>
-    <script src="/static/listening_history.js"></script>
+    <script src="/static/in_progress.js"></script>
 </body>
 
 </html>

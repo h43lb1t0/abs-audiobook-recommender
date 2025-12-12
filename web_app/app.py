@@ -174,6 +174,14 @@ def listening_history():
     """
     return render_template('listening_history.html')
 
+@app.route('/in-progress')
+@login_required
+def in_progress():
+    """
+    Returns the in-progress books page
+    """
+    return render_template('in_progress.html')
+
 @app.route('/api/listening-history')
 @login_required
 def get_listening_history():
@@ -224,6 +232,53 @@ def get_listening_history():
         return jsonify(finished_books)
     except Exception as e:
         logger.error(f"Error fetching listening history: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/in-progress')
+@login_required
+def get_in_progress():
+    """
+    Returns the user's in-progress books
+    """
+    try:
+        items_map, _ = get_all_items()
+        _, in_progress_ids, _ = get_finished_books(items_map, user_id=current_user.id)
+        
+        in_progress_books = []
+        for book_id, progress in in_progress_ids.items():
+            if book_id in items_map:
+                book = items_map[book_id]
+                # Parse series_sequence as float for proper sorting
+                seq = book.get('series_sequence')
+                try:
+                    seq_num = float(seq) if seq else float('inf')
+                except (ValueError, TypeError):
+                    seq_num = float('inf')
+                
+                in_progress_books.append({
+                    'id': book['id'],
+                    'title': book['title'],
+                    'author': book['author'],
+                    'series': book.get('series'),
+                    'series_sequence': book.get('series_sequence'),
+                    'series_sequence_num': seq_num,
+                    'cover': book.get('cover'), # Ensure cover is available if needed by frontend directly, usually handled by separate endpoint though
+                    'progress': progress
+                })
+        
+        # Sort: first by series name, then by sequence
+        in_progress_books.sort(key=lambda x: (
+            x['series'] is None,
+            (x['series'] or '').lower(),
+            x['series_sequence_num']
+        ))
+        
+        for book in in_progress_books:
+            del book['series_sequence_num']
+            
+        return jsonify(in_progress_books)
+    except Exception as e:
+        logger.error(f"Error fetching in-progress books: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/rate-book', methods=['POST'])

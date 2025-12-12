@@ -16,10 +16,14 @@
                 <h1>Audiobook Recommendations</h1>
                 <div>
                     {% if current_user.id == 'root' %}
-                    <button id="force-sync-btn" class="btn secondary" style="width: auto; margin: 0; margin-right: 10px; background-color: #d9534f; border-color: #d43f3a; color: white;">Force Sync</button>
+                    <button id="force-sync-btn" class="btn secondary"
+                        style="width: auto; margin: 0; margin-right: 10px; background-color: #d9534f; border-color: #d43f3a; color: white;">Force
+                        Sync</button>
                     {% endif %}
                     <a href="{{ url_for('listening_history') }}" class="btn secondary"
                         style="width: auto; margin: 0; margin-right: 10px;">My History</a>
+                    <a href="{{ url_for('in_progress') }}" class="btn secondary"
+                        style="width: auto; margin: 0; margin-right: 10px;">In Progress</a>
                     <a href="{{ url_for('change_password') }}" class="btn secondary"
                         style="width: auto; margin: 0; margin-right: 10px;">Change Password</a>
                     <a href="{{ url_for('logout') }}" class="btn secondary" style="width: auto; margin: 0;">Logout</a>
