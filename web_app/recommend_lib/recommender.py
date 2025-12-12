@@ -158,14 +158,15 @@ def rank_candidates(
     top_genres: Set[str],
     top_authors: Set[str],
     top_narrators: Set[str],
-    user_id: str = None
+    user_id: str = None,
+    abandoned_ids: Set[str] = None
 ) -> List[Dict]:
     """
     Ranks unread books based on RAG similarity to finished books and user preferences.
 
     Uses a Two-Phase Rating System:
     1. Query phase: Find candidates similar to positively-rated books (4-5★)
-    2. Penalty phase: Demote candidates similar to negatively-rated books (1-2★)
+    2. Penalty phase: Demote candidates similar to negatively-rated books (1-2★) AND abandoned books.
 
     Now splits query into Content (semantic) and Metadata (structural) matching.
 
@@ -176,6 +177,7 @@ def rank_candidates(
         top_authors (Set[str]): Set of top authors
         top_narrators (Set[str]): Set of top narrators
         user_id (str, optional): User ID. Defaults to None.
+        abandoned_ids (Set[str], optional): Set of abandoned book IDs. Defaults to None.
 
     Returns:
         List[Dict]: List of ranked books
@@ -207,6 +209,14 @@ def rank_candidates(
             negative_ids.append(book_id)
         else:
             neutral_ids.append(book_id)
+            
+    # Add abandoned books to negative seeds
+    if abandoned_ids:
+        logger.info(f"Adding {len(abandoned_ids)} abandoned books to negative seeds")
+        # Ensure we don't duplicate if for some reason it's also in finished_books (unlikely but possible via race condition or data issue)
+        for ab_id in abandoned_ids:
+            if ab_id not in negative_ids:
+                negative_ids.append(ab_id)
     
     logger.info(f"Rating categories: {len(positive_ids)} liked (4-5★), {len(negative_ids)} disliked (1-2★), {len(neutral_ids)} neutral")
     
@@ -746,15 +756,44 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
     series_candidates = {}
     standalone_candidates = []
 
+
+        
+    # --- FETCH ABANDONED BOOKS ---
+    abandoned_ids = set()
+    abandoned_series = set()
+    
+    try:
+        abandoned_entries = UserLib.query.filter_by(user_id=user_id, status='abandoned').all()
+        for entry in abandoned_entries:
+            abandoned_ids.add(entry.book_id)
+            
+            # Check if it's a sequenced series
+            if entry.book_id in items_map:
+                ab_book = items_map[entry.book_id]
+                if ab_book['series'] and ab_book['series_sequence'] is not None:
+                     abandoned_series.add(ab_book['series'])
+                     
+        logger.info(f"Found {len(abandoned_ids)} abandoned books and {len(abandoned_series)} abandoned sequenced series.")
+        
+    except Exception as e:
+        logger.error(f"Error fetching abandoned books: {e}")
+
     for item_id, book in items_map.items():
         if item_id in finished_ids:
             finished_books_list.append(book)
             continue
+            
+        if item_id in abandoned_ids:
+             continue
         
         if item_id in in_progress_ids:
             continue
             
         if (book['title'], book['author']) in cleaned_finished_keys:
+            continue
+            
+        # Filter abandoned series
+        if book['series'] in abandoned_series:
             continue
         
         if book['series']:
@@ -809,7 +848,7 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
     
     # --- RANKING ---
 
-    ranked_candidates = rank_candidates(unread_books_candidates, finished_books_list, top_genres, top_authors, top_narrators, user_id)
+    ranked_candidates = rank_candidates(unread_books_candidates, finished_books_list, top_genres, top_authors, top_narrators, user_id, abandoned_ids=abandoned_ids)
     
 
     # --- COLLABORATIVE FILTERING BONUS ---

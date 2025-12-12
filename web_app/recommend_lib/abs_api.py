@@ -158,7 +158,7 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
         user_id (str): The user ID to fetch finished books for. If None, uses the token's user (api/me).
 
     Returns:
-        Tuple[set, set, set]: A tuple containing the finished books, in-progress books, and the finished keys
+        Tuple[set, dict, set]: A tuple containing the finished books (set), in-progress books (dict: id->progress), and the finished keys (set)
     """
 
     if user_id:
@@ -180,7 +180,7 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
     media_progress = user_data.get('mediaProgress', [])
     
     finished_ids = set()
-    in_progress_ids = set()
+    in_progress_ids = {} # Changed to dict to store progress
 
     finished_keys = set()
     
@@ -235,7 +235,7 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
                 finished_keys.add((book['title'], book['author']))
                 
         elif progress > 0 or currentTime > 0:
-            in_progress_ids.add(item_id)
+            in_progress_ids[item_id] = progress
             status = 'reading'
 
         if status:
@@ -253,6 +253,11 @@ def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, 
                 if item_id in user_lib_map:
                     entry = user_lib_map[item_id]
                     if entry.status != status:
+                        # Don't overwrite abandoned status with reading status
+                        if entry.status == 'abandoned' and status == 'reading':
+                            logger.debug(f"Skipping status update for item {item_id}: keeping 'abandoned' despite 'reading' status from ABS")
+                            continue
+                            
                         logger.debug(f"Updating status for item {item_id} from {entry.status} to {status}")
                         entry.status = status
                         entry.updated_at = datetime.now().isoformat()

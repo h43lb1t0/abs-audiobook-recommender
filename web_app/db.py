@@ -29,12 +29,12 @@ class UserLib(db.Model):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.id"))
     book_id: Mapped[str] = mapped_column(String(255))
-    status: Mapped[str] = mapped_column(String(255)) # finished, reading
+    status: Mapped[str] = mapped_column(String(255)) # finished, reading, abandoned
     rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5 stars, nullable for unrated books
 
     __table_args__ = (
         CheckConstraint("(rating >= 1 AND rating <= 5) OR (rating IS NULL)", name="valid_rating"),
-        CheckConstraint("status IN ('finished', 'reading')", name="valid_status"),
+        CheckConstraint("status IN ('finished', 'reading', 'abandoned')", name="valid_status"),
         CheckConstraint(
             "(status = 'finished') OR (rating IS NULL)",
             name="valid_finished_rating"
