@@ -60,3 +60,11 @@ class BackgroundCheckLog(db.Model):
     created_recommendations: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class LibraryStats(db.Model):
+    __tablename__ = "library_stats"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(255), unique=True)
+    value_json: Mapped[str] = mapped_column(db.Text)
+
+

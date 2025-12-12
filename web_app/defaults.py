@@ -24,11 +24,13 @@ MOST_COMMON_AUTHORS = 5 # Maximum number of authors to consider
 MOST_COMMON_NARRATORS = 5 # Maximum number of narrators to consider
 
 DURATION_WEIGHT = 0.5 # How much to boost duration matches
+BLEED_ON_NEIGHBOR_PERCENTAGE = 0.1 # Percentage of affinity to bleed to neighbor buckets
 
 # Duration Buckets
 DURATION_BUCKETS = {
     "super_short": {"max": 3600}, # < 1h
-    "short": {"min": 3600, "max": 18000}, # 1h - 5h
+    "short": {"min": 3600, "max": 10800}, # 1h - 3h
+    "mid_short": {"min": 10800, "max": 18000}, # 3h - 5h
     "medium": {"min": 18000, "max": 54000}, # 5h - 15h
     "long": {"min": 54000, "max": 86400}, # 15h - 24h
     "epic": {"min": 86400} # > 24h

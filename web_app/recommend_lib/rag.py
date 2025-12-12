@@ -10,6 +10,10 @@ from huggingface_hub import hf_hub_download
 from recommend_lib.abs_api import get_all_items
 from sentence_transformers import SentenceTransformer
 from tokenizers import Tokenizer
+from defaults import DURATION_BUCKETS
+from db import LibraryStats, db
+import json
+from collections import Counter
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +52,30 @@ def get_rag_system() -> Optional['RAGSystem']:
         logger.warning("RAG System accessed before explicit initialization. Initializing now.")
         init_rag_system()
     return _RAG_INSTANCE
+
+
+
+def get_duration_bucket(duration_seconds: float) -> str:
+    """
+    Determines the duration bucket for a given duration.
+    
+    Args:
+        duration_seconds: Duration in seconds.
+        
+    Returns:
+        str: Bucket name.
+    """
+    if not duration_seconds:
+        return None
+        
+    for bucket, limits in DURATION_BUCKETS.items():
+        min_val = limits.get('min', 0)
+        max_val = limits.get('max', float('inf'))
+        
+        if min_val <= duration_seconds < max_val:
+            return bucket
+            
+    return None
 
 
 def format_duration(duration_seconds: float) -> str:
@@ -278,6 +306,48 @@ class RAGSystem:
         else:
             logger.info("No new items to index.")
             
+            logger.info("No new items to index.")
+            
+        # --- Calculate and Save Library Stats (Duration Distribution) ---
+        try:
+             logger.info("Calculating library duration distribution...")
+             duration_counts = Counter()
+             total_items_with_duration = 0
+             
+             for item in items_map.values():
+                 dur = item.get('duration_seconds')
+                 bucket = get_duration_bucket(dur)
+                 if bucket:
+                     duration_counts[bucket] += 1
+                     total_items_with_duration += 1
+                     
+             distribution = {}
+             if total_items_with_duration > 0:
+                 for bucket in DURATION_BUCKETS:
+                     distribution[bucket] = duration_counts[bucket] / total_items_with_duration
+             else:
+                  # Fallback to uniform if empty library?
+                  for bucket in DURATION_BUCKETS:
+                      distribution[bucket] = 0.2
+                      
+             logger.info(f"Library Duration Distribution: { {k: round(v, 2) for k, v in distribution.items()} }")
+             
+             # Save to DB
+             # We need to be in an app context for this, which we should be if called from app
+             from flask import current_app
+             if current_app:
+                  stats_entry = LibraryStats.query.filter_by(key='duration_distribution').first()
+                  if not stats_entry:
+                      stats_entry = LibraryStats(key='duration_distribution')
+                      db.session.add(stats_entry)
+                  
+                  stats_entry.value_json = json.dumps(distribution)
+                  db.session.commit()
+                  logger.info("Library stats saved to database.")
+                  
+        except Exception as e:
+             logger.error(f"Failed to calculate/save library stats: {e}")
+
         return count_new
 
     def retrieve_similar(self, query_text: str, n_results: int = 5, collection_type: str = 'content') -> List[str]:

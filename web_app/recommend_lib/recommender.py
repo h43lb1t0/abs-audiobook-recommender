@@ -10,8 +10,9 @@ from dotenv import load_dotenv
 from recommend_lib.abs_api import (get_abs_users, get_all_items,
                                    get_finished_books)
 from recommend_lib.llm import generate_book_recommendations
-from recommend_lib.rag import get_rag_system
+from recommend_lib.rag import get_rag_system, get_duration_bucket
 from sklearn.cluster import KMeans
+from db import LibraryStats
 
 logger = logging.getLogger(__name__)
 
@@ -53,27 +54,6 @@ def _load_language_file(language: str, type: str) -> str:
 
 
 
-def get_duration_bucket(duration_seconds: float) -> str:
-    """
-    Determines the duration bucket for a given duration.
-    
-    Args:
-        duration_seconds: Duration in seconds.
-        
-    Returns:
-        str: Bucket name.
-    """
-    if not duration_seconds:
-        return None
-        
-    for bucket, limits in DURATION_BUCKETS.items():
-        min_val = limits.get('min', 0)
-        max_val = limits.get('max', float('inf'))
-        
-        if min_val <= duration_seconds < max_val:
-            return bucket
-            
-    return None
 
 
 def calculate_duration_affinities(finished_books: List[Dict]) -> Dict[str, float]:
@@ -110,7 +90,27 @@ def calculate_duration_affinities(finished_books: List[Dict]) -> Dict[str, float
     for bucket in DURATION_BUCKETS:
         affinities[bucket] = counts[bucket] / total_books
         
-    return affinities
+    # --- Apply Neighbor Bleed ---
+    # Buckets ordered by length
+    ordered_buckets = ["super_short", "short", "mid_short", "medium", "long", "epic"]
+    smoothed_affinities = affinities.copy()
+    
+    for i, bucket in enumerate(ordered_buckets):
+        raw_val = affinities.get(bucket, 0.0)
+        if raw_val > 0:
+            bleed_amount = raw_val * BLEED_ON_NEIGHBOR_PERCENTAGE
+            
+            # Bleed left
+            if i > 0:
+                left_bucket = ordered_buckets[i-1]
+                smoothed_affinities[left_bucket] = smoothed_affinities.get(left_bucket, 0.0) + bleed_amount
+                
+            # Bleed right
+            if i < len(ordered_buckets) - 1:
+                right_bucket = ordered_buckets[i+1]
+                smoothed_affinities[right_bucket] = smoothed_affinities.get(right_bucket, 0.0) + bleed_amount
+                
+    return smoothed_affinities
 
 
 def rank_candidates(
@@ -171,10 +171,24 @@ def rank_candidates(
     
     logger.info(f"Rating categories: {len(positive_ids)} liked (4-5★), {len(negative_ids)} disliked (1-2★), {len(neutral_ids)} neutral")
     
+    # Load Library Distribution
+    library_distribution = {}
+    try:
+        stats_entry = LibraryStats.query.filter_by(key='duration_distribution').first()
+        if stats_entry:
+            library_distribution = json.loads(stats_entry.value_json)
+            logger.info(f"Loaded Library Distribution: { {k: round(v, 2) for k, v in library_distribution.items()} }")
+        else:
+            logger.warning("Library Duration Distribution not found in DB. Defaulting to uniform.")
+            library_distribution = {b: 0.2 for b in DURATION_BUCKETS}
+    except Exception as e:
+        logger.error(f"Error loading library stats: {e}")
+        library_distribution = {b: 0.2 for b in DURATION_BUCKETS}
+        
     # Calculate Duration Affinities
     bucket_affinities = calculate_duration_affinities(finished_books)
     if any(a > 0.2 for a in bucket_affinities.values()): # Only log if we have actual data (not using the 0.2 fallback everywhere effectively)
-         logger.info(f"Duration Affinities: { {k: round(v, 2) for k, v in bucket_affinities.items() if v > 0} }")
+         logger.info(f"User Duration Affinities: { {k: round(v, 2) for k, v in bucket_affinities.items() if v > 0} }")
 
     
     candidate_scores = Counter()
@@ -326,17 +340,42 @@ def rank_candidates(
              reasons.append("Style/Author Match")
              
         # Duration Boost
-        duration_affinity = bucket_affinities.get(get_duration_bucket(book.get('duration_seconds')), 0.0)
+        # Duration Boost (Lift-based)
+        duration_bucket = get_duration_bucket(book.get('duration_seconds'))
+        user_affinity = bucket_affinities.get(duration_bucket, 0.0)
+        library_share = library_distribution.get(duration_bucket, 1.0) # Default to 1.0 to avoid huge lift if missing
         
-        if duration_affinity > 0:
-             # Boost Formula: Score * (1 + (Affinity * Weight))
-             boost_multiplier = 1.0 + (duration_affinity * DURATION_WEIGHT)
-             final_score *= boost_multiplier
+        # Calculate Lift
+        # Lift = min( (UserShare / LibraryShare), 2.5 )
+        lift = 0.0
+        if library_share > 0:
+            lift = user_affinity / library_share
+        else:
+            lift = 0.0 # Should not happen if lib stats are correct
+            
+        lift = min(lift, 2.5)
+        
+        # Only boost if Lift > 1.0 (Meaning they like it MORE than random chance)
+        if lift > 1.0:
+             # Boost Formula: Score * (1 + (Lift * Weight))
+             # Note: If lift is high (e.g. 2.5), boost is Score * (1 + 1.25) = Score * 2.25
+             boost_multiplier = 1.0 + ((lift - 1.0) * DURATION_WEIGHT) # Apply weight to the "extra" affinity?
+             # Wait, prompt said: Score * (1 + (Affinity * Weight)) previously.
+             # Now for lift? Prompt just said "Calculate a boost using this formula" but didn't redefine the formula fully.
+             # Assuming we replace Affinity with Lift in a similar structure?
+             # "FinalScore = RAGScore * (1 + (BucketAffinity * Weight))" was old.
+             # New logic using Lift usually implies we boost by the Lift factor directly or weighted?
+             # Let's interpret "Calculate a boost for each bucket" as substituting Lift into the mechanism.
+             # But Lift can be > 1.0. If Lift is 2.0 and Weight is 0.5, Boost = 1 + (2.0 * 0.5) = 2.0.
              
-             # Add reason if highly relevant (e.g. they read this length > 30% of the time, or if it's the dominant factor)
-             # Let's say if affinity is >= 0.25 (1/4 of their books) it's worth noting?
-             if duration_affinity >= 0.25:
-                 reasons.append(f"Duration Match ({get_duration_bucket(book.get('duration_seconds')).replace('_', ' ').title()})")
+             # Re-reading: "Calculate a boost for each bucket using this formula: FinalScore = RAGScore * (1 + (BucketAffinity * Weight))" (Original request)
+             # "Instead of using the raw user percentage, you should calculate the Lift."
+             # So I should substitute BucketAffinity with Lift.
+             
+             final_score *= (1.0 + (lift * DURATION_WEIGHT))
+             
+             if lift >= 1.5:
+                 reasons.append(f"Duration Match ({duration_bucket.replace('_', ' ').title()})")
         
         book['_rag_score'] = final_score
         book['_match_reasons'] = reasons
