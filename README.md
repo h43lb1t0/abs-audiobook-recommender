@@ -94,6 +94,7 @@ See [RECOMMENDATION_ALGO.md](docs/RECOMMENDATION_ALGO.md) for a deep dive into t
 - [x] Advanced RAG Integration
 - [x] Scoring system for your audiobooks (Listening History with 1-5 star ratings)
 - [x] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the LLM
+- [ ] A page for books in progress with the option to mark them as abandoned (also used for recommendations algorithm)
 - [ ] Docker containerization for easier deployment
 - [ ] Enhanced UI/UX design
 - [ ] ~~Additional filtering options (e.g., by genre, length, narrator)~~
