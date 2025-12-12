@@ -181,49 +181,85 @@ def rank_candidates(
 
 
     ranked_books = []
+    
+    # 1. Collect Raw Scores
+    raw_candidates = []
+    max_rag = 1.0 # Avoid div by zero
+    max_pref = 1.0
 
     for book in unread_books:
-
         book_id = book['id']
-
-        match_score = candidate_scores.get(book_id, 0)
+        match_score = candidate_scores.get(book_id, 0) # Raw RAG score
         
         pref_score = 0
-
         for genre in book.get('genres', []):
             if genre in top_genres:
-                pref_score += RECOMMENDATION_BOOST['GENRE'] # Boost genres
-
+                pref_score += RECOMMENDATION_BOOST['GENRE']
         if book.get('author', '') in top_authors:
-            pref_score += RECOMMENDATION_BOOST['AUTHOR'] # Boost authors
-            
+            pref_score += RECOMMENDATION_BOOST['AUTHOR']
         if book.get('narrator', '') in top_narrators:
-            pref_score += RECOMMENDATION_BOOST['NARRATOR'] # Boost narrators
+            pref_score += RECOMMENDATION_BOOST['NARRATOR']
             
-        total_score = match_score + pref_score
+        # Update Maxes
+        if match_score > max_rag: max_rag = match_score
+        if pref_score > max_pref: max_pref = pref_score
         
-        book['_rag_score'] = total_score
+        raw_candidates.append({
+            'book': book,
+            'match_score': match_score,
+            'pref_score': pref_score,
+            'reasons': []
+        })
+        
+    logger.info(f"Scoring Normalization - Max RAG: {max_rag}, Max Pref: {max_pref}")
 
+    # 2. Normalize and Combine
+    for item in raw_candidates:
+        book = item['book']
+        match_score = item['match_score']
+        pref_score = item['pref_score']
+        
+        # Normalize (clamp negative RAG to 0 for normalization purpose? No, allow penalty to drag it down)
+        # Note: If match_score is negative, norm_rag will be negative.
+        norm_rag = match_score / max_rag if max_rag > 0 else 0
+        norm_pref = pref_score / max_pref if max_pref > 0 else 0
+        
+        # Weighted Score (0.7 RAG + 0.3 Pref)
+        final_score = (norm_rag * 0.7) + (norm_pref * 0.3)
+        
+        # Scale up for display/debug (optional, but keep it 0-1 for consistency)
+        # Actually, let's keep it 0-100 for user understanding? 
+        # The user example was 0.7. Let's stick to 0-1 float for internal score.
+        # But for 'reasons' display like "Score: 2.0", they might expect small numbers now.
+        
+        book['_rag_score'] = final_score
+
+        # Reasons
         reasons = []
-        if match_score > 50:
+        
+        # Thresholds adjusted for Normalized scores (roughly)
+        # 50/100 -> 0.5
+        # 0 -> 0
+        # -50 -> -0.5
+        
+        # Note: We use the NORMALIZED RAG score for "Similarity" reasons
+        if norm_rag > 0.5:
             reasons.append("Similar to books you loved")
-        elif match_score > 0:
+        elif norm_rag > 0:
             reasons.append("Matches your reading profile")
-        elif match_score < -50:
+        elif norm_rag < -0.5:
             reasons.append("Note: Similar to books you disliked")
             
-        specific_reasons = match_reasons.get(book_id, set())
+        specific_reasons = match_reasons.get(book['id'], set())
         if "Content Match" in specific_reasons and "Metadata Match" in specific_reasons:
              reasons.append("Strong Content & Style Match")
         elif "Content Match" in specific_reasons:
              reasons.append("Content Match")
         elif "Metadata Match" in specific_reasons:
              reasons.append("Style/Author Match")
-        
+             
         book['_match_reasons'] = reasons
-        
         ranked_books.append(book)
-
 
     ranked_books.sort(key=lambda x: -x.get('_rag_score', 0))
     
@@ -678,7 +714,7 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
             
             for book in ranked_candidates:
                 if book['id'] in collab_ids:
-                    boost_amount = 15 * similarity_score
+                    boost_amount = 0.15 * similarity_score
                     book['_rag_score'] += boost_amount
 
                     if '_match_reasons' not in book:

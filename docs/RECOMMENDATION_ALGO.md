@@ -46,38 +46,44 @@ The system maintains two distinct vector collections in **ChromaDB**:
     -   **Weight**: **40%** of the matching score.
 
 ### Ranking Algorithm
-The system ranks unread books using a **Two-Phase** approach based on user ratings (1-5 stars).
+The system ranks unread books using a **Normalized Weighted Average** approach. This ensures that a perfect semantic match isn't overpowered by simple metadata matches.
 
-#### Phase 1: The "Like" Query
-1.  **Seed Selection**: Identifies books the user rated **4-5 stars**.
-2.  **Dual Clustering**:
-    -   Clusters **Content embeddings** to find preferred plots (e.g., "Space Opera").
-    -   Clusters **Metadata embeddings** to find preferred styles (e.g., "Long epics by Brandon Sanderson").
-3.  **Weighted Retrieval**: 
-    -   Queries both collections independently.
-    -   Combines scores: `Total Score = (ContentMatch * 0.6) + (MetadataMatch * 0.4)`.
-4.  **Multipliers**: Books found via "Positive" ratings get a **2.0x multiplier**.
+#### 1. Score Calculation (Two-Pass Normalization)
+Instead of adding raw numbers, the system calculates two separate scores for every candidate and normalizes them to a 0-1 range.
 
-#### Phase 2: The "Dislike" Penalty
-1.  **Seed Selection**: Identifies books the user rated **1-2 stars**.
-2.  **Penalty**: Finds books similar in Content or Metadata to disliked items and applies a **negative score** (1.5x penalty).
+1.  **RAG Score (Similarity)**: Derived from the cosine distance between User and Book embeddings.
+2.  **Preference Score (Metadata)**: Derived from explicit matches with the user's top Genres, Authors, and Narrators.
+
+The system finds the *Maximum RAG Score* and *Maximum Preference Score* across all candidates in the current batch.
+
+#### 2. Normalization & Weighting
+Each booklet's score is normalized against the batch maximums:
+-   `Norm_RAG = Raw_RAG / Max_RAG`
+-   `Norm_Pref = Raw_Pref / Max_Pref`
+
+The final score is a weighted combination:
+`Final_Score = (Norm_RAG * 0.7) + (Norm_Pref * 0.3)`
+
+> This 70/30 split prioritizes semantic relevance (Plot/Theme) while still using User Preferences (Author/Genre) as a significant tie-breaker.
 
 ## 3. User Preference Boosting
 
-On top of semantic similarity, the system applies explicit boosts for metadata matches:
--   **Top Genres**: +10 points if the book matches one of the user's top 5 most-read genres.
--   **Top Authors**: +15 points if the book matches one of the user's top 5 most-read authors.
--   **Top Narrators**: +5 points if the book matches one of the user's top 5 most-read narrators.
+On top of semantic similarity, the system calculates a raw preference score which is then normalized:
+-   **Top Genres**: +10 (raw)
+-   **Top Authors**: +15 (raw)
+-   **Top Narrators**: +5 (raw)
+
+*Note: These raw values are relative. If the highest preference score in a batch is 15, a book with 15 points gets a `Norm_Pref` of 1.0.*
 
 ## 4. Collaborative Filtering
 
 The system attempts to find "reading soulmates" to diversify recommendations.
 
 1.  **User Similarity**: It compares the current user's *taste clusters* with every other user's *finished book embeddings*.
-2.  **Matching**: If another user has a taste cluster that is highly similar (cosine similarity > 0.6) to one of the current user's clusters.
+2.  **Matching**: If another user has a taste cluster that is highly similar (cosine similarity > 0.6).
 3.  **Boosting**:
-    -   The system retrieves recommendations based on the *similar user's* matching cluster.
-    -   Books that appear in this set receive a **score boost** (Score += 15 * Similarity).
+    -   Books liked by the similar user receive a boost.
+    -   **Scaled Boost**: `Score += 0.15 * Similarity` (Scaled to match the 0-1 normalized system).
     -   **Match Reason**: These books are flagged with "Highly relevant to similar user 'Username'".
 
 ## 5. Final Selection & LLM Integration
