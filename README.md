@@ -137,7 +137,7 @@ Want to contribute a translation? See [Adding a New Language](docs/add_new_langu
 - [x] Enhanced UI/UX design
 - [ ] ~~Additional filtering options (e.g., by genre, length, narrator)~~
 - [x] Support for other AI models/providers
-- [ ] Mobile-friendly design
+- [x] Mobile-friendly design
 
 (Strikethrough items are not actively planned but may be revisited in the future.)
 
