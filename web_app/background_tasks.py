@@ -105,34 +105,38 @@ def scheduled_user_activity_check(app, socketio_instance):
                 if should_generate:
                     logger.info(f"BGT: Generating background recommendations for {user.username} (ID: {user_id})")
                     try:
-                        recs = get_recommendations(user_id=user_id)
-                        
-                        existing_recs = UserRecommendations.query.filter_by(user_id=user_id).first()
-                        
-                        if existing_recs:
-                            existing_recs.recommendations_json = json.dumps(recs)
-                            existing_recs.created_at = check_time
-                        else:
-                            new_recs = UserRecommendations(
-                                user_id=user_id,
-                                recommendations_json=json.dumps(recs),
-                                created_at=check_time
-                            )
-                            db.session.add(new_recs)
-                        
-                        db.session.commit()
-                        logger.info(f"BGT: Recommendations updated for {user.username}. Emitting to room {user_id}")
-                        
-                        # Broadcast websocket event to notify user of new recommendations
-                        try:
-                            logger.info(f"BGT: Attempting emit to {user_id} with socketio {socketio_instance}")
-                            socketio_instance.emit('recommendations_ready', {
-                                'recommendations': recs,
-                                'generated_at': check_time
-                            }, room=user_id)
-                            logger.info(f"BGT: Successfully emitted recommendations_ready event for {user.username} to room {user_id}")
-                        except Exception as ws_error:
-                            logger.error(f"BGT: Failed to broadcast websocket event: {ws_error}")
+                        # Wrap in request context for Flask-Babel (gettext/get_locale)
+                        # We pass the user's language as a query param to satisfy the locale selector
+                        lang = user.language if user.language else 'en'
+                        with app.test_request_context(f"/?lang={lang}"):
+                            recs = get_recommendations(user_id=user_id)
+                            
+                            existing_recs = UserRecommendations.query.filter_by(user_id=user_id).first()
+                            
+                            if existing_recs:
+                                existing_recs.recommendations_json = json.dumps(recs)
+                                existing_recs.created_at = check_time
+                            else:
+                                new_recs = UserRecommendations(
+                                    user_id=user_id,
+                                    recommendations_json=json.dumps(recs),
+                                    created_at=check_time
+                                )
+                                db.session.add(new_recs)
+                            
+                            db.session.commit()
+                            logger.info(f"BGT: Recommendations updated for {user.username}. Emitting to room {user_id}")
+                            
+                            # Broadcast websocket event to notify user of new recommendations
+                            try:
+                                logger.info(f"BGT: Attempting emit to {user_id} with socketio {socketio_instance}")
+                                socketio_instance.emit('recommendations_ready', {
+                                    'recommendations': recs,
+                                    'generated_at': check_time
+                                }, room=user_id)
+                                logger.info(f"BGT: Successfully emitted recommendations_ready event for {user.username} to room {user_id}")
+                            except Exception as ws_error:
+                                logger.error(f"BGT: Failed to broadcast websocket event: {ws_error}")
                         
                     except Exception as e:
                         logger.error(f"BGT: Error generating recommendations for {user.username}: {e}")
