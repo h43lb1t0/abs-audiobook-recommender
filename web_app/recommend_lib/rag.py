@@ -151,7 +151,7 @@ class JinaEmbeddingFunction(embedding_functions.EmbeddingFunction):
             model_name (str): Name of the Jina v3 model to use.
             default_task (str): Default task for embeddings.
         """
-        cache_folder = Path.resolve(".cache")
+        cache_folder = Path(".cache").resolve()
         self.model = SentenceTransformer(
             model_name, trust_remote_code=True, cache_folder=cache_folder
         )
@@ -199,9 +199,9 @@ class RAGSystem:
             persist_directory (str): Directory to persist the RAG system.
             model_repo (str): Jina Embeddings v3 ONNX model repository.
         """
-        self.persist_directory = persist_directory
-        if not Path.exists(self.persist_directory):
-            Path.mkdir(self.persist_directory)
+        self.persist_directory = Path(persist_directory)
+        if not self.persist_directory.exists():
+            self.persist_directory.mkdir()
 
         self.client = chromadb.PersistentClient(path=self.persist_directory)
 

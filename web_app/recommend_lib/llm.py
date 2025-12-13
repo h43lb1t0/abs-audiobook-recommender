@@ -36,14 +36,14 @@ def generate_book_recommendations(prompt: str, language: str = "en") -> dict:
     system_prompt_path = current_dir / "languages" / "system" / f"{language}.txt"
 
     try:
-        with Path.open(system_prompt_path, "r", encoding="utf-8") as f:
+        with system_prompt_path.open("r", encoding="utf-8") as f:
             system_instruction = f.read()
     except Exception as e:
         logger.error(f"Failed to load system prompt from {system_prompt_path}: {e}")
         # Fallback to English if specific language fails
         fallback_path = current_dir / "languages" / "system" / "en.txt"
         try:
-            with Path.open(fallback_path, "r", encoding="utf-8") as f:
+            with fallback_path.open("r", encoding="utf-8") as f:
                 system_instruction = f.read()
         except FileNotFoundError:
             system_instruction = (

@@ -50,10 +50,10 @@ def _load_language_file(language: str, type: str) -> str:
     languages_dir = Path(__file__).parent / "languages"
     language_file = languages_dir / f"{type}/{language}.txt"
 
-    if not Path.exists(language_file):
+    if not language_file.exists():
         raise ValueError(f"Language file not found: {language_file}")
 
-    with Path.open(language_file, "r", encoding="utf-8") as f:
+    with language_file.open("r", encoding="utf-8") as f:
         content = f.read()
 
     return content
@@ -420,7 +420,6 @@ def rank_candidates(
 
         # Calculate Lift
         # Lift = min( (UserShare / LibraryShare), 2.5 )
-        lift = 0.0
         if library_share > 0:
             lift = user_affinity / library_share
         else:
@@ -1069,7 +1068,7 @@ def get_recommendations(
 
     logger.info(f"Prompt prepared with {len(top_candidates)} candidates.")
 
-    with Path.open("prompt_debug.txt", "w", encoding="utf-8") as f:
+    with Path("prompt_debug.txt").open("w", encoding="utf-8") as f:
         f.write(prompt)
 
     recs = generate_book_recommendations(prompt, language=Language_setting)

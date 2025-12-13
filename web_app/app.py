@@ -707,9 +707,6 @@ def handle_get_recommendations(data):
         # Save to DB (overwrite)
         current_time = datetime.now().isoformat()
 
-        existing_recs = UserRecommendations.query.filter_by(
-            user_id=current_user.id
-        ).first()
         with app.app_context():  # Ensure DB context
             existing_recs = UserRecommendations.query.filter_by(
                 user_id=current_user.id

@@ -86,7 +86,7 @@ def get_all_items() -> Tuple[dict, dict]:
         items_resp.raise_for_status()
 
         if WRITE_DEBUG_FILES:
-            with Path.open("items_resp.json", "w", encoding="utf-8") as f:
+            with Path("items_resp.json").open("w", encoding="utf-8") as f:
                 json.dump(items_resp.json(), f, ensure_ascii=False, indent=4)
 
         for item in items_resp.json().get("results", []):
@@ -131,7 +131,7 @@ def get_all_items() -> Tuple[dict, dict]:
             }
 
             if WRITE_DEBUG_FILES:
-                with Path.open("items_map.json", "w", encoding="utf-8") as f:
+                with Path("items_map.json").open("w", encoding="utf-8") as f:
                     json.dump(items_map, f, ensure_ascii=False, indent=4)
 
             if (
