@@ -30,7 +30,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key") # Needed for sessions
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app)
 
 ABS_URL = os.getenv("ABS_URL")
 ABS_TOKEN = os.getenv("ABS_TOKEN")
