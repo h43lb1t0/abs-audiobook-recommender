@@ -13,7 +13,7 @@
       
       <!-- Abandoned Overlay -->
       <div v-if="book.status === 'abandoned'" class="absolute inset-0 bg-black/60 flex items-center justify-center">
-        <span class="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded uppercase tracking-wider">Abandoned</span>
+        <span class="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded uppercase tracking-wider">{{ $t('common.abandoned') }}</span>
       </div>
     </div>
     
