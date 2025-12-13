@@ -25,6 +25,11 @@
                 active-class="bg-brand-primary/20 text-brand-primary">
                  {{ $t('nav.inProgress') }}
               </router-link>
+              <router-link v-if="user?.id === 'root'" to="/admin" 
+                class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200"
+                active-class="bg-brand-primary/20 text-brand-primary">
+                 {{ $t('nav.admin') }}
+              </router-link>
             </div>
           </div>
         </div>
@@ -81,6 +86,11 @@
           class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
           active-class="bg-brand-primary/20 text-brand-primary">
            {{ $t('nav.inProgress') }}
+        </router-link>
+        <router-link v-if="user?.id === 'root'" to="/admin" 
+          class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
+          active-class="bg-brand-primary/20 text-brand-primary">
+           {{ $t('nav.admin') }}
         </router-link>
         <button @click="showSettings = true; mobileMenuOpen = false" 
           class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium w-full text-left">

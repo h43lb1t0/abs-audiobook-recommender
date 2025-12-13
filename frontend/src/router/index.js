@@ -12,6 +12,7 @@ const routes = [
     { path: '/history', name: 'History', component: History },
     { path: '/in-progress', name: 'InProgress', component: InProgress },
     { path: '/settings', name: 'ChangePassword', component: ChangePassword },
+    { path: '/admin', name: 'Admin', component: () => import('../views/Admin.vue') },
 ]
 
 const router = createRouter({

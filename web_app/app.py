@@ -673,6 +673,67 @@ def force_sync():
         logger.error(f"Error in force sync: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/admin/users', methods=['GET'])
+@login_required
+def get_users():
+    """
+    Returns all users (Root only)
+    """
+    if current_user.id != 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+    
+    try:
+        users = User.query.all()
+        user_list = []
+        for user in users:
+            user_list.append({
+                "id": user.id,
+                "username": user.username,
+                "language": user.language,
+                "force_password_change": user.force_password_change
+            })
+        return jsonify(user_list)
+    except Exception as e:
+        logger.error(f"Error fetching users: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/change-user-password', methods=['POST'])
+@login_required
+def admin_change_password():
+    """
+    Changes a user's password (Root only)
+    """
+    if current_user.id != 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+    
+    try:
+        data = request.get_json()
+        target_user_id = data.get('user_id')
+        new_password = data.get('new_password')
+        
+        if not target_user_id or not new_password:
+            return jsonify({"error": _("user_id and new_password are required")}), 400
+            
+        if len(new_password) < 4:
+            return jsonify({"error": _("Password must be at least 4 characters long")}), 400
+            
+        target_user = db.session.get(User, target_user_id)
+        if not target_user:
+            return jsonify({"error": _("User not found")}), 404
+            
+        if check_password_hash(target_user.password, new_password):
+             return jsonify({"error": _("New password cannot be the same as the current password")}), 400
+
+        target_user.password = generate_password_hash(new_password)
+        target_user.force_password_change = True
+        
+        db.session.commit()
+        logger.info(f"Password for user {target_user.username} changed by root.")
+        return jsonify({"success": True, "message": _("Password updated successfully")})
+    except Exception as e:
+        logger.error(f"Error changing user password: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/debug/force-check')
 def debug_force_check():
     scheduled_user_activity_check(app, socketio)
