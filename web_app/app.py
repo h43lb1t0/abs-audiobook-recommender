@@ -195,6 +195,10 @@ def change_password():
              if request.is_json:
                 return jsonify({"error": _("New passwords do not match")}), 400
              flash(_('New passwords do not match'))
+        elif check_password_hash(current_user.password, new_password):
+             if request.is_json:
+                return jsonify({"error": _("New password cannot be the same as the current password")}), 400
+             flash(_('New password cannot be the same as the current password'))
         else:
             current_user.password = generate_password_hash(new_password)
             current_user.force_password_change = False
