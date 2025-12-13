@@ -13,21 +13,28 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, provide } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import NavBar from './components/NavBar.vue'
 
 const user = ref(null)
 const isAuthenticated = ref(false)
+const absUrl = ref('')
 const router = useRouter()
 const route = useRoute()
+
+provide('absUrl', absUrl)
 
 const checkAuth = async () => {
   try {
     const { data } = await axios.get('/api/auth/status')
     isAuthenticated.value = data.authenticated
     user.value = data.user
+    
+    if (data.abs_url) {
+      absUrl.value = data.abs_url
+    }
     
     // If on login page and authenticated, redirect home
     if (route.path === '/login' && isAuthenticated.value) {

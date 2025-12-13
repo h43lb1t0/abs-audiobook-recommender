@@ -180,7 +180,7 @@ def change_password():
 @app.route('/api/auth/status')
 def auth_status():
     if current_user.is_authenticated:
-        return jsonify({"authenticated": True, "user": {"id": current_user.id, "username": current_user.username}})
+        return jsonify({"authenticated": True, "user": {"id": current_user.id, "username": current_user.username}, "abs_url": ABS_URL})
     return jsonify({"authenticated": False}), 401
 
 @app.route('/logout')

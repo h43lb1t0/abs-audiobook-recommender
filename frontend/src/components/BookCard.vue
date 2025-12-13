@@ -1,7 +1,10 @@
 <template>
   <div class="group relative flex flex-col bg-brand-card rounded-md overflow-hidden shadow-sm transition-all duration-200 hover:shadow-md">
     <div class="relative aspect-square w-full overflow-hidden bg-brand-dark">
-      <img :src="coverUrl" :alt="book.title" loading="lazy" class="h-full w-full object-cover transition-opacity duration-300 group-hover:opacity-90" @error="handleImageError">
+      <a :href="itemUrl" target="_blank" rel="noopener noreferrer" class="block h-full w-full cursor-pointer" v-if="itemUrl">
+        <img :src="coverUrl" :alt="book.title" loading="lazy" class="h-full w-full object-cover transition-opacity duration-300 group-hover:opacity-90" @error="handleImageError">
+      </a>
+      <img v-else :src="coverUrl" :alt="book.title" loading="lazy" class="h-full w-full object-cover transition-opacity duration-300 group-hover:opacity-90" @error="handleImageError">
       
       <!-- Progress Bar Overlay for In Progress -->
       <div v-if="book.progress !== undefined" class="absolute bottom-0 left-0 right-0 h-1.5 bg-black/50">
@@ -37,13 +40,19 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 
 const props = defineProps({
   book: {
     type: Object,
     required: true
   }
+})
+
+const absUrl = inject('absUrl', { value: '' }) // Inject ref or default object with value
+
+const itemUrl = computed(() => {
+  return absUrl.value ? `${absUrl.value}/audiobookshelf/item/${props.book.id}` : ''
 })
 
 const coverUrl = computed(() => {
