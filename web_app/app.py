@@ -267,6 +267,14 @@ def in_progress():
     """
     return app.send_static_file('dist/index.html')
 
+@app.route('/settings')
+@login_required
+def settings():
+    """
+    Returns the settings page
+    """
+    return app.send_static_file('dist/index.html')
+
 @app.route('/api/listening-history')
 @login_required
 def get_listening_history():
