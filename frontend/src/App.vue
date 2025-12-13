@@ -42,7 +42,13 @@ const checkAuth = async () => {
       locale.value = user.value.language
     }
     
-    // If on login page and authenticated, redirect home
+    // If force_password_change is true, redirect to settings (unless already there)
+    if (user.value.force_password_change && route.path !== '/settings') {
+        router.push('/settings')
+        return
+    }
+
+    // If on login page and authenticated, redirect home (if not forced to change password)
     if (route.path === '/login' && isAuthenticated.value) {
       router.push('/')
     }
@@ -72,9 +78,10 @@ onMounted(() => {
 })
 
 // Watch route changes to re-check auth if needed or handle titles, etc.
-watch(() => route.path, () => {
-  // Optional: re-check auth on navigation if needed security-wise
-  // checkAuth() 
+watch(() => route.path, (newPath) => {
+  if (user.value && user.value.force_password_change && newPath !== '/settings') {
+      router.push('/settings')
+  }
 })
 </script>
 

@@ -47,7 +47,8 @@
         "updating": "Updating...",
         "success": "Password updated successfully",
         "mismatch": "New passwords do not match",
-        "error": "Failed to update password"
+        "error": "Failed to update password",
+        "forcedMessage": "You must change your password before continuing."
     },
     "login": {
         "welcome": "Welcome Back",

@@ -47,7 +47,8 @@
         "updating": "Aktualisiere...",
         "success": "Passwort erfolgreich aktualisiert",
         "mismatch": "Neue Passwörter stimmen nicht überein",
-        "error": "Fehler beim Aktualisieren des Passworts"
+        "error": "Fehler beim Aktualisieren des Passworts",
+        "forcedMessage": "Du musst dein Passwort ändern, bevor du fortfahren kannst."
     },
     "login": {
         "welcome": "Willkommen zurück",

@@ -93,7 +93,16 @@ def init_db():
             db.session.add(new_root)
             db.session.commit()
             logger.info("Root user created.")
-            
+        
+        # Check for force_password_change column and add it if missing (Manual Migration)
+        inspector = inspect(db.engine)
+        columns = [col['name'] for col in inspector.get_columns('users')]
+        if 'force_password_change' not in columns:
+            logger.info("Adding force_password_change column to users table")
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN force_password_change BOOLEAN DEFAULT 0"))
+                conn.commit()
+
         sync_abs_users()
 
 
@@ -113,7 +122,8 @@ def sync_abs_users():
                 new_user = User(
                     id=abs_user['id'], 
                     username=abs_user['username'], 
-                    password=hashed_password
+                    password=hashed_password,
+                    force_password_change=True
                 )
                 db.session.add(new_user)
             else:
@@ -187,6 +197,7 @@ def change_password():
              flash(_('New passwords do not match'))
         else:
             current_user.password = generate_password_hash(new_password)
+            current_user.force_password_change = False
             db.session.commit()
             if request.is_json:
                 return jsonify({"success": True})
@@ -224,7 +235,8 @@ def auth_status():
             "user": {
                 "id": current_user.id, 
                 "username": current_user.username,
-                "language": getattr(current_user, 'language', 'en')
+                "language": getattr(current_user, 'language', 'en'),
+                "force_password_change": getattr(current_user, 'force_password_change', False)
             }, 
             "abs_url": ABS_URL
         })
