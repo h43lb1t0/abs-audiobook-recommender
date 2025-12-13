@@ -1,6 +1,6 @@
 <template>
   <div class="group relative flex flex-col bg-slate-800/50 backdrop-blur-md rounded-xl overflow-hidden border border-white/5 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-brand-primary/20">
-    <div class="relative aspect-[2/3] w-full overflow-hidden bg-slate-900">
+    <div class="relative aspect-square w-full overflow-hidden bg-slate-900">
       <img :src="coverUrl" :alt="book.title" loading="lazy" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" @error="handleImageError">
       
       <!-- Progress Bar Overlay for In Progress -->
