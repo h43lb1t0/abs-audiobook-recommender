@@ -42,6 +42,9 @@ def get_locale():
     user_lang = request.args.get('lang')
     if user_lang:
         return user_lang
+    
+    if current_user.is_authenticated and hasattr(current_user, 'language') and current_user.language:
+        return current_user.language
         
     return request.accept_languages.best_match(['en', 'de'])
 
@@ -192,10 +195,39 @@ def change_password():
             
     return app.send_static_file('dist/index.html')
 
+@app.route('/api/user/language', methods=['POST'])
+@login_required
+def set_language():
+    try:
+        data = request.get_json()
+        language = data.get('language')
+        
+        if not language:
+            return jsonify({"error": _("Language is required")}), 400
+            
+        if language not in ['en', 'de']:
+             return jsonify({"error": _("Invalid language")}), 400
+             
+        current_user.language = language
+        db.session.commit()
+        
+        return jsonify({"success": True, "language": language})
+    except Exception as e:
+        logger.error(f"Error setting language: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/auth/status')
 def auth_status():
     if current_user.is_authenticated:
-        return jsonify({"authenticated": True, "user": {"id": current_user.id, "username": current_user.username}, "abs_url": ABS_URL})
+        return jsonify({
+            "authenticated": True, 
+            "user": {
+                "id": current_user.id, 
+                "username": current_user.username,
+                "language": getattr(current_user, 'language', 'en')
+            }, 
+            "abs_url": ABS_URL
+        })
     return jsonify({"authenticated": False}), 401
 
 @app.route('/logout')

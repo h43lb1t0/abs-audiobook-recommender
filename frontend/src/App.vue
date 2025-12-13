@@ -17,6 +17,7 @@ import { ref, onMounted, watch, provide } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import NavBar from './components/NavBar.vue'
+import i18n from './i18n'
 
 const user = ref(null)
 const isAuthenticated = ref(false)
@@ -34,6 +35,11 @@ const checkAuth = async () => {
     
     if (data.abs_url) {
       absUrl.value = data.abs_url
+    }
+    
+    if (user.value && user.value.language) {
+      const { locale } = i18n.global
+      locale.value = user.value.language
     }
     
     // If on login page and authenticated, redirect home

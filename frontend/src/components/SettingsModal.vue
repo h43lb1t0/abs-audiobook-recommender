@@ -59,20 +59,24 @@
 <script setup>
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import axios from 'axios'
 
 const { locale } = useI18n()
 const router = useRouter()
 const emit = defineEmits(['close'])
 
-const changeLocale = (newLocale) => {
+const changeLocale = async (newLocale) => {
+    try {
+        await axios.post('/api/user/language', { language: newLocale })
+    } catch (e) {
+        console.error("Failed to save language preference", e)
+    }
+    // Optimistic update
     locale.value = newLocale
 }
 
 const goToChangePassword = () => {
     emit('close')
-    router.push('/settings') // Keep internal route as /settings for change password page, or rename it? 
-    // Plan said: "Change Password" button (navigates to `/settings`). 
-    // Existing route is /settings -> ChangePassword component.
-    // So this is correct.
+    router.push('/settings')
 }
 </script>
