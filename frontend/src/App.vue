@@ -56,6 +56,8 @@ const checkAuth = async () => {
   }
 }
 
+provide('checkAuth', checkAuth)
+
 const forceSync = async () => {
   if (!confirm('Are you sure you want to force sync the library? This might take a while.')) return;
   
@@ -71,10 +73,11 @@ onMounted(() => {
   checkAuth()
 })
 
-// Watch route changes to re-check auth if needed or handle titles, etc.
-watch(() => route.path, () => {
-  // Optional: re-check auth on navigation if needed security-wise
-  // checkAuth() 
+// Enforce strict routing rules and auth checks
+watch([() => user.value, () => route.path], ([newUser, newPath]) => {
+  if (newUser && newUser.force_password_change && newPath !== '/settings') {
+      router.replace('/settings')
+  }
 })
 </script>
 

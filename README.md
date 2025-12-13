@@ -11,10 +11,10 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     -   Excludes books marked as **Abandoned**.
     -   **Series Awareness**: Only recommends the *next* unread book in a series or the first book of a new series.
     -   **Abandoned Series Filter**: Automatically excludes entire series if a sequenced book is abandoned.
--   **On-Device RAG (Retrieval Augmented Generation)**:
-    -   Uses **local ONNX embeddings** (Jina v3) to understand the semantic meaning of your books.
-    -   No external API or expensive GPU required for embeddings.
-    -   Finds books with similar descriptions, genres, and themes to your favorites.
+-   **Advanced Local RAG**:
+    -   **Zero-Latency Embeddings**: Uses optimized **Model2Vec** (Jina v3 distilled) for instant, local vectorization.
+    -   **Privacy First**: No external APIs or heavy GPU requirements.
+    -   **Semantic Discovery**: Finds connections based on plot, themes, and writing style, not just keywords.
 -   **Smart Duration Boosting**:
     -   Learns your preferred audiobook lengths (e.g., "Short", "Epic").
     -   Boosts recommendations that match your listening habits while filtering out lengths you avoid.
@@ -75,6 +75,8 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     LLAMA_SERVER_URL=http://localhost:8080/v1/chat/completions
     # Optional: Limit to specific library ID
     ABS_LIB=
+    # Optional: Admin password (default: admin)
+    ROOT_PASSWORD=admin
     ```
 
 ## Usage
@@ -87,9 +89,15 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
 2.  **View Recommendations:**
     Open `http://localhost:5000` in your browser.
     
-    **Login:** Use your Audiobookshelf username. The initial password is the same as your username.
+    **Login:** 
+    -   **Standard Users**: Log in with your Audiobookshelf username. 
+        -   **Initial Password**: Same as your username.
+        -   **First Login**: You will be **forced** to change your password immediately upon your first successful login.
+    -   **Admin User**: A `root` user is created automatically.
+        -   **Default Password**: `admin`.
+        -   Can be changed via `ROOT_PASSWORD` environment variable.
     
-    **Settings:** Click the gear icon to change your language or update your password.
+    **Settings:** Click the gear icon to change your language or update your password manually.
 
 ## Developer Info
 

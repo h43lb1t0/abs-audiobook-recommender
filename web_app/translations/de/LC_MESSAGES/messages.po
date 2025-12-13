@@ -149,3 +149,6 @@ msgstr ""
 "Empfohlen basierend auf Genre-/Autor-/Sprecherpräferenzen. Punktzahl: "
 "%(score)s"
 
+
+msgid "New password cannot be the same as the current password"
+msgstr "Das neue Passwort darf nicht mit dem aktuellen Passwort übereinstimmen"

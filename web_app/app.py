@@ -93,7 +93,7 @@ def init_db():
             db.session.add(new_root)
             db.session.commit()
             logger.info("Root user created.")
-            
+
         sync_abs_users()
 
 
@@ -113,7 +113,8 @@ def sync_abs_users():
                 new_user = User(
                     id=abs_user['id'], 
                     username=abs_user['username'], 
-                    password=hashed_password
+                    password=hashed_password,
+                    force_password_change=True
                 )
                 db.session.add(new_user)
             else:
@@ -181,12 +182,17 @@ def change_password():
             if request.is_json:
                 return jsonify({"error": _("Incorrect current password")}), 400
             flash(_('Incorrect current password'))
+        elif check_password_hash(current_user.password, new_password):
+             if request.is_json:
+                return jsonify({"error": _("New password cannot be the same as the current password")}), 400
+             flash(_('New password cannot be the same as the current password'))
         elif new_password != confirm_password:
              if request.is_json:
                 return jsonify({"error": _("New passwords do not match")}), 400
              flash(_('New passwords do not match'))
         else:
             current_user.password = generate_password_hash(new_password)
+            current_user.force_password_change = False
             db.session.commit()
             if request.is_json:
                 return jsonify({"success": True})
@@ -224,7 +230,8 @@ def auth_status():
             "user": {
                 "id": current_user.id, 
                 "username": current_user.username,
-                "language": getattr(current_user, 'language', 'en')
+                "language": getattr(current_user, 'language', 'en'),
+                "force_password_change": getattr(current_user, 'force_password_change', False)
             }, 
             "abs_url": ABS_URL
         })
@@ -257,6 +264,14 @@ def listening_history():
 def in_progress():
     """
     Returns the in-progress books page
+    """
+    return app.send_static_file('dist/index.html')
+
+@app.route('/settings')
+@login_required
+def settings():
+    """
+    Returns the settings page
     """
     return app.send_static_file('dist/index.html')
 
