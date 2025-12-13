@@ -1,3 +1,5 @@
+from gevent import monkey
+monkey.patch_all()
 import json
 import logging
 import os
@@ -9,10 +11,11 @@ from db import User, UserLib, UserRecommendations, db
 from defaults import *
 from dotenv import load_dotenv
 from flask import (Flask, Response, flash, jsonify, redirect, render_template,
-                   request, url_for)
+                   request, url_for, send_from_directory)
 from flask_apscheduler import APScheduler
 from flask_login import (LoginManager, current_user, login_required,
                          login_user, logout_user)
+from flask_babel import Babel, gettext as _
 from flask_socketio import SocketIO, emit, join_room
 from logger_conf import setup_logging
 from recommend_lib.abs_api import (get_abs_users, get_all_items,
@@ -28,7 +31,24 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key") # Needed for sessions
-socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
+socketio = SocketIO(app)
+
+def get_locale():
+    # Check if a custom header or query param is present
+    # Priority:
+    # 1. 'lang' query parameter (e.g. ?lang=de)
+    # 2. 'Accept-Language' header
+    
+    user_lang = request.args.get('lang')
+    if user_lang:
+        return user_lang
+    
+    if current_user.is_authenticated and hasattr(current_user, 'language') and current_user.language:
+        return current_user.language
+        
+    return request.accept_languages.best_match(['en', 'de'])
+
+babel = Babel(app, locale_selector=get_locale)
 
 ABS_URL = os.getenv("ABS_URL")
 ABS_TOKEN = os.getenv("ABS_TOKEN")
@@ -109,8 +129,13 @@ def sync_abs_users():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        if request.is_json:
+            data = request.get_json()
+            username = data.get('username')
+            password = data.get('password')
+        else:
+            username = request.form.get('username')
+            password = request.form.get('password')
 
         logger.debug(f"Login attempt for username: {username}")
 
@@ -122,35 +147,88 @@ def login():
                 logger.debug("Password match. Logging in.")
 
                 login_user(user)
+                if request.is_json:
+                    return jsonify({"success": True, "user": {"id": user.id, "username": user.username}})
                 return redirect(url_for('index'))
             else:
                 logger.debug("Password mismatch.")
-                flash('Invalid username or password')
+                if request.is_json:
+                    return jsonify({"error": _("Invalid username or password")}), 401
+                flash(_('Invalid username or password'))
         else:
             logger.debug("User not found.")
-            flash('Invalid username or password')
+            if request.is_json:
+                return jsonify({"error": _("Invalid username or password")}), 401
+            flash(_('Invalid username or password'))
             
-    return render_template('login.html')
+    return app.send_static_file('dist/index.html')
 
 @app.route('/change-password', methods=['GET', 'POST'])
 @login_required
 def change_password():
     if request.method == 'POST':
-        current_password = request.form.get('current_password')
-        new_password = request.form.get('new_password')
-        confirm_password = request.form.get('confirm_password')
+        if request.is_json:
+            data = request.get_json()
+            current_password = data.get('current_password')
+            new_password = data.get('new_password')
+            confirm_password = data.get('confirm_password')
+        else:
+            current_password = request.form.get('current_password')
+            new_password = request.form.get('new_password')
+            confirm_password = request.form.get('confirm_password')
 
         if not check_password_hash(current_user.password, current_password):
-            flash('Incorrect current password')
+            if request.is_json:
+                return jsonify({"error": _("Incorrect current password")}), 400
+            flash(_('Incorrect current password'))
         elif new_password != confirm_password:
-            flash('New passwords do not match')
+             if request.is_json:
+                return jsonify({"error": _("New passwords do not match")}), 400
+             flash(_('New passwords do not match'))
         else:
             current_user.password = generate_password_hash(new_password)
             db.session.commit()
-            flash('Password updated successfully')
+            if request.is_json:
+                return jsonify({"success": True})
+            flash(_('Password updated successfully'))
             return redirect(url_for('index'))
             
-    return render_template('change_password.html')
+    return app.send_static_file('dist/index.html')
+
+@app.route('/api/user/language', methods=['POST'])
+@login_required
+def set_language():
+    try:
+        data = request.get_json()
+        language = data.get('language')
+        
+        if not language:
+            return jsonify({"error": _("Language is required")}), 400
+            
+        if language not in ['en', 'de']:
+             return jsonify({"error": _("Invalid language")}), 400
+             
+        current_user.language = language
+        db.session.commit()
+        
+        return jsonify({"success": True, "language": language})
+    except Exception as e:
+        logger.error(f"Error setting language: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/auth/status')
+def auth_status():
+    if current_user.is_authenticated:
+        return jsonify({
+            "authenticated": True, 
+            "user": {
+                "id": current_user.id, 
+                "username": current_user.username,
+                "language": getattr(current_user, 'language', 'en')
+            }, 
+            "abs_url": ABS_URL
+        })
+    return jsonify({"authenticated": False}), 401
 
 @app.route('/logout')
 @login_required
@@ -164,7 +242,7 @@ def index():
     """
     Returns the index.html file
     """
-    return render_template('index.html')
+    return app.send_static_file('dist/index.html')
 
 @app.route('/history')
 @login_required
@@ -172,7 +250,7 @@ def listening_history():
     """
     Returns the listening history page
     """
-    return render_template('listening_history.html')
+    return app.send_static_file('dist/index.html')
 
 @app.route('/in-progress')
 @login_required
@@ -180,7 +258,7 @@ def in_progress():
     """
     Returns the in-progress books page
     """
-    return render_template('in_progress.html')
+    return app.send_static_file('dist/index.html')
 
 @app.route('/api/listening-history')
 @login_required
@@ -306,23 +384,23 @@ def rate_book():
         rating = data.get('rating')
         
         if not book_id:
-            return jsonify({"error": "book_id is required"}), 400
+            return jsonify({"error": _("book_id is required")}), 400
         
         if rating is not None and (rating < 1 or rating > 5):
-            return jsonify({"error": "Rating must be between 1 and 5"}), 400
+            return jsonify({"error": _("Rating must be between 1 and 5")}), 400
         
         # Check if rating already exists
         existing = UserLib.query.filter_by(user_id=current_user.id, book_id=book_id).first()
 
         if existing.status == 'abandoned':
-            return jsonify({"error": "You cannot rate a book that you have abandoned"}), 400
+            return jsonify({"error": _("You cannot rate a book that you have abandoned")}), 400
         
         if existing:
             existing.rating = rating
             existing.updated_at = datetime.now().isoformat()
             db.session.commit()
         else:
-            return jsonify({"error": "Book not found in library"}), 404
+            return jsonify({"error": _("Book not found in library")}), 404
         return jsonify({"success": True, "book_id": book_id, "rating": rating})
     except Exception as e:
         logger.error(f"Error saving rating: {e}")
@@ -353,14 +431,14 @@ def abandon_book():
         book_id = data.get('book_id')
         
         if not book_id:
-            return jsonify({"error": "book_id is required"}), 400
+            return jsonify({"error": _("book_id is required")}), 400
             
         # Check if book exists in library
         existing = UserLib.query.filter_by(user_id=current_user.id, book_id=book_id).first()
         
         if existing:
             if existing.status == 'finished':
-                 return jsonify({"error": "Cannot abandon a finished book"}), 400
+                 return jsonify({"error": _("Cannot abandon a finished book")}), 400
                  
             existing.status = 'abandoned'
             existing.updated_at = datetime.now().isoformat()
@@ -395,7 +473,7 @@ def reactivate_book():
         book_id = data.get('book_id')
         
         if not book_id:
-            return jsonify({"error": "book_id is required"}), 400
+            return jsonify({"error": _("book_id is required")}), 400
             
         existing = UserLib.query.filter_by(user_id=current_user.id, book_id=book_id).first()
         
@@ -405,7 +483,7 @@ def reactivate_book():
             db.session.commit()
             return jsonify({"success": True, "book_id": book_id, "status": "reading"})
         else:
-            return jsonify({"error": "Book not found in library"}), 404
+            return jsonify({"error": _("Book not found in library")}), 404
             
     except Exception as e:
         logger.error(f"Error reactivating book: {e}")
@@ -474,7 +552,7 @@ def handle_get_recommendations(data):
     WebSocket handler for generating recommendations
     """
     if not current_user.is_authenticated:
-        emit('error', {'error': 'Authentication required'})
+        emit('error', {'error': _('Authentication required')})
         return
 
     refresh = data.get('refresh', False)
@@ -528,7 +606,7 @@ def proxy_cover(item_id):
     """
 
     if not ABS_URL or not ABS_TOKEN:
-        return "Server misconfigured", 500
+        return _("Server misconfigured"), 500
         
     abs_url = ABS_URL.rstrip('/')
     
@@ -568,7 +646,7 @@ def force_sync():
     Force triggers the library indexing (Root only)
     """
     if current_user.id != 'root':
-        return jsonify({"error": "Unauthorized"}), 403
+        return jsonify({"error": _("Unauthorized")}), 403
     
     try:
         logger.info("Force sync triggered by root user.")

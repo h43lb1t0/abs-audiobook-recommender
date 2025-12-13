@@ -1,0 +1,151 @@
+# German translations for PROJECT.
+# Copyright (C) 2025 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2025.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2025-12-13 02:51+0100\n"
+"PO-Revision-Date: 2025-12-13 02:48+0100\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: de\n"
+"Language-Team: de <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.14.0\n"
+
+#: app.py:153 app.py:154 app.py:158 app.py:159
+msgid "Invalid username or password"
+msgstr "Ungültiger Benutzername oder Passwort"
+
+#: app.py:179 app.py:180
+msgid "Incorrect current password"
+msgstr "Falsches aktuelles Passwort"
+
+#: app.py:183 app.py:184
+msgid "New passwords do not match"
+msgstr "Neue Passwörter stimmen nicht überein"
+
+#: app.py:190
+msgid "Password updated successfully"
+msgstr "Passwort erfolgreich aktualisiert"
+
+#: app.py:355 app.py:402 app.py:444
+msgid "book_id is required"
+msgstr "book_id ist erforderlich"
+
+#: app.py:358
+msgid "Rating must be between 1 and 5"
+msgstr "Bewertung muss zwischen 1 und 5 liegen"
+
+#: app.py:364
+msgid "You cannot rate a book that you have abandoned"
+msgstr "Du kannst kein Buch bewerten, das du abgebrochen hast"
+
+#: app.py:371 app.py:454
+msgid "Book not found in library"
+msgstr "Buch nicht in der Bibliothek gefunden"
+
+#: app.py:409
+msgid "Cannot abandon a finished book"
+msgstr "Ein beendetes Buch kann nicht abgebrochen werden"
+
+#: app.py:523
+msgid "Authentication required"
+msgstr "Authentifizierung erforderlich"
+
+#: app.py:577
+msgid "Server misconfigured"
+msgstr "Server fehlkonfiguriert"
+
+#: app.py:617
+msgid "Unauthorized"
+msgstr "Nicht autorisiert"
+
+#: translation_keys.py:5
+msgid "Super Short"
+msgstr "Sehr kurz"
+
+#: translation_keys.py:6
+msgid "Short"
+msgstr "Kurz"
+
+#: translation_keys.py:7
+msgid "Mid Short"
+msgstr "Mittelkurz"
+
+#: translation_keys.py:8
+msgid "Medium"
+msgstr "Mittel"
+
+#: translation_keys.py:9
+msgid "Long"
+msgstr "Lang"
+
+#: translation_keys.py:10
+msgid "Epic"
+msgstr "Episch"
+
+#: recommend_lib/recommender.py:366
+msgid "Similar to books you loved"
+msgstr "Ähnlich wie Bücher, die dir gefallen haben"
+
+#: recommend_lib/recommender.py:368 recommend_lib/recommender.py:927
+msgid "Matches your reading profile"
+msgstr "Passt zu deinem Leseprofil"
+
+#: recommend_lib/recommender.py:370
+msgid "Note: Similar to books you disliked"
+msgstr "Hinweis: Ähnlich wie Bücher, die dir nicht gefallen haben"
+
+#: recommend_lib/recommender.py:374
+msgid "Strong Content & Style Match"
+msgstr "Starke inhaltliche und stilistische Übereinstimmung"
+
+#: recommend_lib/recommender.py:376
+msgid "Content Match"
+msgstr "Inhaltliche Übereinstimmung"
+
+#: recommend_lib/recommender.py:378
+msgid "Style/Author Match"
+msgstr "Stil/Autor Übereinstimmung"
+
+#: recommend_lib/recommender.py:405
+#, python-format
+msgid "Duration Match (%(bucket)s)"
+msgstr "Passende Länge (%(bucket)s)"
+
+#: recommend_lib/recommender.py:407
+msgid "Duration Mismatch"
+msgstr "Länge passt nicht"
+
+#: recommend_lib/recommender.py:901
+#, python-format
+msgid "Highly relevant to similar user '%(user)s'"
+msgstr "Hochrelevant für ähnlichen Benutzer '%(user)s'"
+
+#: recommend_lib/recommender.py:928
+#, python-format
+msgid "Recommended based on your reading profile. Score: %(score)s"
+msgstr "Empfohlen basierend auf deinem Leseprofil. Punktzahl: %(score)s"
+
+#: recommend_lib/recommender.py:930
+#, python-format
+msgid ""
+"Recommended based on your history causing a high match score. Similar to:"
+" %(reasons)s"
+msgstr ""
+"Empfohlen aufgrund deiner Historie, die zu einer hohen Übereinstimmung "
+"geführt hat. Ähnlich wie: %(reasons)s"
+
+#: recommend_lib/recommender.py:933
+#, python-format
+msgid "Recommended based on genre/author/narrator preferences. Score: %(score)s"
+msgstr ""
+"Empfohlen basierend auf Genre-/Autor-/Sprecherpräferenzen. Punktzahl: "
+"%(score)s"
+

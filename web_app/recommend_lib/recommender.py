@@ -4,6 +4,7 @@ import math
 import os
 from collections import Counter
 from typing import Dict, List, Set, Tuple
+from flask_babel import gettext as _, get_locale
 
 from db import User, UserLib
 from defaults import *
@@ -362,19 +363,19 @@ def rank_candidates(
         
         # Note: We use the NORMALIZED RAG score for "Similarity" reasons
         if norm_rag > 0.5:
-            reasons.append("Similar to books you loved")
+            reasons.append(_("Similar to books you loved"))
         elif norm_rag > 0:
-            reasons.append("Matches your reading profile")
+            reasons.append(_("Matches your reading profile"))
         elif norm_rag < -0.5:
-            reasons.append("Note: Similar to books you disliked")
+            reasons.append(_("Note: Similar to books you disliked"))
             
         specific_reasons = match_reasons.get(book['id'], set())
         if "Content Match" in specific_reasons and "Metadata Match" in specific_reasons:
-             reasons.append("Strong Content & Style Match")
+             reasons.append(_("Strong Content & Style Match"))
         elif "Content Match" in specific_reasons:
-             reasons.append("Content Match")
+             reasons.append(_("Content Match"))
         elif "Metadata Match" in specific_reasons:
-             reasons.append("Style/Author Match")
+             reasons.append(_("Style/Author Match"))
              
         # Duration Boost
         # Duration Boost (Lift-based)
@@ -400,9 +401,10 @@ def rank_candidates(
         
         # Reasons
         if duration_multiplier >= 1.3:
-             reasons.append(f"Duration Match ({duration_bucket.replace('_', ' ').title()})")
+             formatted_bucket = _(duration_bucket.replace('_', ' ').title())
+             reasons.append(_("Duration Match (%(bucket)s)") % {'bucket': formatted_bucket})
         elif duration_multiplier <= 0.6:
-             reasons.append(f"Duration Mismatch")
+             reasons.append(_("Duration Mismatch"))
         
         book['_rag_score'] = final_score
         book['_match_reasons'] = reasons
@@ -896,7 +898,7 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
                     if '_match_reasons' not in book:
                         book['_match_reasons'] = []
 
-                    book['_match_reasons'].append(f"Highly relevant to similar user '{similar_user}'")
+                    book['_match_reasons'].append(_("Highly relevant to similar user '%(user)s'") % {'user': similar_user})
 
             ranked_candidates.sort(key=lambda x: -x.get('_rag_score', 0))
 
@@ -907,6 +909,7 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
         return []
 
 
+                
     # --- NO LLM PATH ---
 
     if not use_llm:
@@ -921,18 +924,20 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
             score = book.get('_rag_score', 0)
 
             if reasons:
-                if reasons == ["Matches your reading profile"]:
-                   reason_text = f"Recommended based on your reading profile. Score: {score}"
+                if len(reasons) == 1 and reasons[0] == _("Matches your reading profile"):
+                   reason_text = _("Recommended based on your reading profile. Score: %(score)s") % {'score': score}
                 else:
-                   reason_text = f"Recommended based on your history causing a high match score. Similar to: {', '.join(reasons)}"
+                   reason_text = _("Recommended based on your history causing a high match score. Similar to: %(reasons)s") % {'reasons': ', '.join(reasons)}
             else:
 
-                reason_text = f"Recommended based on genre/author/narrator preferences. Score: {score}"
+                reason_text = _("Recommended based on genre/author/narrator preferences. Score: %(score)s") % {'score': score}
                 
             final_recommendations.append({
                 'id': book['id'],
                 'title': book['title'],
                 'author': book['author'],
+                'description': book.get('description'),
+                'duration': format_duration(book.get('duration_seconds')),
                 'reason': reason_text,
                 'cover': book['cover']
             })
@@ -976,7 +981,7 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
     for book in finished_books_list:
         finished_str += f"- {book['title']} by {book['author']}\n"
     
-    Language_setting = os.getenv('LANGUAGE', 'de').lower()
+    Language_setting = str(get_locale())
 
     prompt_string = _load_language_file(Language_setting, 'user')
 
@@ -1013,6 +1018,8 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
                 'id': original_book['id'],
                 'title': original_book['title'],
                 'author': original_book['author'],
+                'description': original_book.get('description'),
+                'duration': format_duration(original_book.get('duration_seconds')),
                 'reason': rec.get('reason'),
                 'cover': original_book['cover']
             })
@@ -1021,4 +1028,21 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
             logger.warning(f"Invalid index between returned by LLM: {rec_index}")
                 
     return final_recommendations
+
+
+def format_duration(seconds):
+    if not seconds:
+        return None
+    
+    try:
+        val = float(seconds)
+    except (ValueError, TypeError):
+        return None
+    
+    hours = int(val // 3600)
+    minutes = int((val % 3600) // 60)
+    
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
 

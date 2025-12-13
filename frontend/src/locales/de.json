@@ -1,0 +1,68 @@
+{
+    "nav": {
+        "home": "Startseite",
+        "history": "Verlauf",
+        "inProgress": "Gerade am Hören",
+        "settings": "Einstellungen",
+        "forceSync": "Sync erzwingen",
+        "logout": "Abmelden"
+    },
+    "settings": {
+        "title": "Einstellungen",
+        "language": "Sprache",
+        "changePassword": "Passwort ändern",
+        "close": "Schließen",
+        "save": "Speichern"
+    },
+    "home": {
+        "welcome": "Willkommen zurück, {username}",
+        "subtitle": "Hier sind einige Empfehlungen basierend auf deinem Hörverlauf.",
+        "generateNew": "Neu generieren",
+        "lastUpdated": "Zuletzt aktualisiert: {date}",
+        "tapToStart": "Tippe auf \"Neu generieren\" um zu starten",
+        "loading": "Lädt..."
+    },
+    "history": {
+        "title": "Hörverlauf",
+        "loading": "Lade Verlauf...",
+        "stats": "{count} Buch beendet \u00B7 {rated} bewertet | {count} Bücher beendet \u00B7 {rated} bewertet",
+        "standalone": "Einzelbücher"
+    },
+    "inProgress": {
+        "title": "Gerade am Hören",
+        "loading": "Hörbücher werden geladen...",
+        "stats": "{count} Hörbuch wird gehört | {count} Hörbücher werden gehört",
+        "standalone": "Eigenständige Hörbücher",
+        "noBooks": "Keine Hörbücher werden gerade gehört.",
+        "reactivate": "Fortsetzen",
+        "abandon": "Abbrechen"
+    },
+    "changePassword": {
+        "title": "Passwort ändern",
+        "subtitle": "Aktualisiere deine Zugangsdaten",
+        "currentPassword": "Aktuelles Passwort",
+        "newPassword": "Neues Passwort",
+        "confirmNewPassword": "Neues Passwort bestätigen",
+        "updateButton": "Passwort aktualisieren",
+        "updating": "Aktualisiere...",
+        "success": "Passwort erfolgreich aktualisiert",
+        "mismatch": "Neue Passwörter stimmen nicht überein",
+        "error": "Fehler beim Aktualisieren des Passworts"
+    },
+    "login": {
+        "welcome": "Willkommen zurück",
+        "subtitle": "Melde dich an, um deine Hörbuch-Empfehlungen zu sehen",
+        "username": "Benutzername",
+        "password": "Passwort",
+        "usernamePlaceholder": "Dein Benutzername",
+        "passwordPlaceholder": "Dein Passwort",
+        "signIn": "Anmelden",
+        "signingIn": "Wird angemeldet..."
+    },
+    "common": {
+        "loading": "Lädt...",
+        "error": "Ein unerwarteter Fehler ist aufgetreten",
+        "booksCount": "{count} Buch | {count} Bücher",
+        "abandoned": "Abgebrochen"
+    }
+}

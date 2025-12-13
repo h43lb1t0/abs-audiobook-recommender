@@ -1,0 +1,68 @@
+{
+    "nav": {
+        "home": "Home",
+        "history": "History",
+        "inProgress": "In Progress",
+        "settings": "Settings",
+        "forceSync": "Force Sync",
+        "logout": "Logout"
+    },
+    "settings": {
+        "title": "Settings",
+        "language": "Language",
+        "changePassword": "Change Password",
+        "close": "Close",
+        "save": "Save"
+    },
+    "home": {
+        "welcome": "Welcome Back, {username}",
+        "subtitle": "Here are some recommendations based on your listening history.",
+        "generateNew": "Generate New",
+        "lastUpdated": "Last updated: {date}",
+        "tapToStart": "Tap \"Generate New\" to get started",
+        "loading": "Loading..."
+    },
+    "history": {
+        "title": "Listening History",
+        "loading": "Loading history...",
+        "stats": "{count} book completed \u00B7 {rated} rated | {count} books completed \u00B7 {rated} rated",
+        "standalone": "Standalone Books"
+    },
+    "inProgress": {
+        "title": "Currently Reading",
+        "loading": "Loading books...",
+        "stats": "{count} book in progress | {count} books in progress",
+        "standalone": "Standalone Books",
+        "noBooks": "No books in progress.",
+        "reactivate": "Reactivate",
+        "abandon": "Abandon"
+    },
+    "changePassword": {
+        "title": "Change Password",
+        "subtitle": "Update your account credentials",
+        "currentPassword": "Current Password",
+        "newPassword": "New Password",
+        "confirmNewPassword": "Confirm New Password",
+        "updateButton": "Update Password",
+        "updating": "Updating...",
+        "success": "Password updated successfully",
+        "mismatch": "New passwords do not match",
+        "error": "Failed to update password"
+    },
+    "login": {
+        "welcome": "Welcome Back",
+        "subtitle": "Sign in to access your audiobook recommendations",
+        "username": "Username",
+        "password": "Password",
+        "usernamePlaceholder": "Enter your username",
+        "passwordPlaceholder": "Enter your password",
+        "signIn": "Sign in",
+        "signingIn": "Signing in..."
+    },
+    "common": {
+        "loading": "Loading...",
+        "error": "An unexpected error occurred",
+        "booksCount": "{count} book | {count} books",
+        "abandoned": "Abandoned"
+    }
+}
