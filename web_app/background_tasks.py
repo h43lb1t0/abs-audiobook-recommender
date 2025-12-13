@@ -123,18 +123,19 @@ def scheduled_user_activity_check(app, socketio_instance):
                         
                         # Broadcast websocket event to notify user of new recommendations
                         try:
+                            logger.info(f"BGT: Attempting emit to {user_id} with socketio {socketio_instance}")
                             socketio_instance.emit('recommendations_ready', {
                                 'recommendations': recs,
                                 'generated_at': check_time
                             }, room=user_id)
-                            logger.debug(f"BGT: Successfully emitted recommendations_ready event for {user.username} to room {user_id}")
+                            logger.info(f"BGT: Successfully emitted recommendations_ready event for {user.username} to room {user_id}")
                         except Exception as ws_error:
-                            logger.warning(f"BGT: Failed to broadcast websocket event: {ws_error}")
+                            logger.error(f"BGT: Failed to broadcast websocket event: {ws_error}")
                         
                     except Exception as e:
                         logger.error(f"BGT: Error generating recommendations for {user.username}: {e}")
                 else:
-                    logger.debug(f"BGT: No recommendations needed for {user.username}")
+                    logger.info(f"BGT: No recommendations needed for {user.username}. changes={bool(recent_changes) if 'recent_changes' in locals() else 'N/A'}, global={new_books_trigger}")
             
             # Update the log if we processed the global trigger
             if new_books_trigger and last_check_log:

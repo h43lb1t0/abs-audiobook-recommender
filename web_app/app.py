@@ -1,3 +1,5 @@
+from gevent import monkey
+monkey.patch_all()
 import json
 import logging
 import os
@@ -9,7 +11,7 @@ from db import User, UserLib, UserRecommendations, db
 from defaults import *
 from dotenv import load_dotenv
 from flask import (Flask, Response, flash, jsonify, redirect, render_template,
-                   request, url_for)
+                   request, url_for, send_from_directory)
 from flask_apscheduler import APScheduler
 from flask_login import (LoginManager, current_user, login_required,
                          login_user, logout_user)
@@ -28,7 +30,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key") # Needed for sessions
-socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 ABS_URL = os.getenv("ABS_URL")
 ABS_TOKEN = os.getenv("ABS_TOKEN")
@@ -109,8 +111,13 @@ def sync_abs_users():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        if request.is_json:
+            data = request.get_json()
+            username = data.get('username')
+            password = data.get('password')
+        else:
+            username = request.form.get('username')
+            password = request.form.get('password')
 
         logger.debug(f"Login attempt for username: {username}")
 
@@ -122,35 +129,59 @@ def login():
                 logger.debug("Password match. Logging in.")
 
                 login_user(user)
+                if request.is_json:
+                    return jsonify({"success": True, "user": {"id": user.id, "username": user.username}})
                 return redirect(url_for('index'))
             else:
                 logger.debug("Password mismatch.")
+                if request.is_json:
+                    return jsonify({"error": "Invalid username or password"}), 401
                 flash('Invalid username or password')
         else:
             logger.debug("User not found.")
+            if request.is_json:
+                return jsonify({"error": "Invalid username or password"}), 401
             flash('Invalid username or password')
             
-    return render_template('login.html')
+    return app.send_static_file('dist/index.html')
 
 @app.route('/change-password', methods=['GET', 'POST'])
 @login_required
 def change_password():
     if request.method == 'POST':
-        current_password = request.form.get('current_password')
-        new_password = request.form.get('new_password')
-        confirm_password = request.form.get('confirm_password')
+        if request.is_json:
+            data = request.get_json()
+            current_password = data.get('current_password')
+            new_password = data.get('new_password')
+            confirm_password = data.get('confirm_password')
+        else:
+            current_password = request.form.get('current_password')
+            new_password = request.form.get('new_password')
+            confirm_password = request.form.get('confirm_password')
 
         if not check_password_hash(current_user.password, current_password):
+            if request.is_json:
+                return jsonify({"error": "Incorrect current password"}), 400
             flash('Incorrect current password')
         elif new_password != confirm_password:
-            flash('New passwords do not match')
+             if request.is_json:
+                return jsonify({"error": "New passwords do not match"}), 400
+             flash('New passwords do not match')
         else:
             current_user.password = generate_password_hash(new_password)
             db.session.commit()
+            if request.is_json:
+                return jsonify({"success": True})
             flash('Password updated successfully')
             return redirect(url_for('index'))
             
-    return render_template('change_password.html')
+    return app.send_static_file('dist/index.html')
+
+@app.route('/api/auth/status')
+def auth_status():
+    if current_user.is_authenticated:
+        return jsonify({"authenticated": True, "user": {"id": current_user.id, "username": current_user.username}})
+    return jsonify({"authenticated": False}), 401
 
 @app.route('/logout')
 @login_required
@@ -164,7 +195,7 @@ def index():
     """
     Returns the index.html file
     """
-    return render_template('index.html')
+    return app.send_static_file('dist/index.html')
 
 @app.route('/history')
 @login_required
@@ -172,7 +203,7 @@ def listening_history():
     """
     Returns the listening history page
     """
-    return render_template('listening_history.html')
+    return app.send_static_file('dist/index.html')
 
 @app.route('/in-progress')
 @login_required
@@ -180,7 +211,7 @@ def in_progress():
     """
     Returns the in-progress books page
     """
-    return render_template('in_progress.html')
+    return app.send_static_file('dist/index.html')
 
 @app.route('/api/listening-history')
 @login_required
