@@ -289,7 +289,9 @@ def admin():
     """
     Returns the admin page
     """
-    return app.send_static_file('dist/index.html')
+    if current_user.id != 'root':
+        flash(_('Unauthorized'))
+    return redirect(url_for('index'))
 
 @app.route('/api/listening-history')
 @login_required
