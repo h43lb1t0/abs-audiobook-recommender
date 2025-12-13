@@ -82,6 +82,10 @@ const fetchRecommendations = (refresh = false) => {
   socket.value.emit('get_recommendations', { refresh })
 }
 
+const refreshRecommendations = () => {
+  fetchRecommendations(true)
+}
+
 onMounted(() => {
   // Use relative path for socket.io to work with proxy and production
   socket.value = io({

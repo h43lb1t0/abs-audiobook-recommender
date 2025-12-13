@@ -1032,8 +1032,13 @@ def format_duration(seconds):
     if not seconds:
         return None
     
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
+    try:
+        val = float(seconds)
+    except (ValueError, TypeError):
+        return None
+    
+    hours = int(val // 3600)
+    minutes = int((val % 3600) // 60)
     
     if hours > 0:
         return f"{hours}h {minutes}m"
