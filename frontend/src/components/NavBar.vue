@@ -1,10 +1,10 @@
 <template>
-  <nav class="sticky top-0 z-50 w-full backdrop-blur-lg bg-brand-dark/80 border-b border-white/10">
+  <nav class="sticky top-0 z-50 w-full bg-brand-header border-b border-white/5 shadow-md">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <div class="flex items-center">
           <router-link to="/" class="flex-shrink-0">
-            <h1 class="text-xl font-bold bg-gradient-to-r from-brand-primary to-brand-accent bg-clip-text text-transparent">
+            <h1 class="text-xl font-bold text-white">
               Audiobook Recommender
             </h1>
           </router-link>
@@ -65,7 +65,7 @@
     </div>
 
     <!-- Mobile menu -->
-    <div v-show="mobileMenuOpen" class="md:hidden bg-brand-dark/95 backdrop-blur-xl border-b border-white/10">
+    <div v-show="mobileMenuOpen" class="md:hidden bg-brand-header border-b border-white/10">
       <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
         <router-link to="/" 
           class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"

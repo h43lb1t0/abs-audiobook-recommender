@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-brand-dark font-sans text-gray-100 selection:bg-brand-primary/30 selection:text-white">
+  <div class="min-h-screen bg-brand-dark font-sans text-gray-100">
     <NavBar v-if="isAuthenticated && user" :user="user" @force-sync="forceSync" />
     
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

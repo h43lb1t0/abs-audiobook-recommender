@@ -1,22 +1,22 @@
 <template>
-  <div class="group relative flex flex-col bg-slate-800/50 backdrop-blur-md rounded-xl overflow-hidden border border-white/5 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-brand-primary/20">
-    <div class="relative aspect-square w-full overflow-hidden bg-slate-900">
-      <img :src="coverUrl" :alt="book.title" loading="lazy" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" @error="handleImageError">
+  <div class="group relative flex flex-col bg-brand-card rounded-md overflow-hidden shadow-sm transition-all duration-200 hover:shadow-md">
+    <div class="relative aspect-square w-full overflow-hidden bg-brand-dark">
+      <img :src="coverUrl" :alt="book.title" loading="lazy" class="h-full w-full object-cover transition-opacity duration-300 group-hover:opacity-90" @error="handleImageError">
       
       <!-- Progress Bar Overlay for In Progress -->
-      <div v-if="book.progress !== undefined" class="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-700/50 backdrop-blur-sm">
-        <div class="h-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)] transition-all duration-500" :style="{ width: (book.progress * 100) + '%' }"></div>
+      <div v-if="book.progress !== undefined" class="absolute bottom-0 left-0 right-0 h-1.5 bg-black/50">
+        <div class="h-full bg-brand-primary" :style="{ width: (book.progress * 100) + '%' }"></div>
       </div>
       
       <!-- Abandoned Overlay -->
-      <div v-if="book.status === 'abandoned'" class="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[1px]">
-        <span class="px-3 py-1 bg-red-500/80 text-white text-xs font-bold rounded-full uppercase tracking-wider backdrop-blur-sm shadow-lg">Abandoned</span>
+      <div v-if="book.status === 'abandoned'" class="absolute inset-0 bg-black/60 flex items-center justify-center">
+        <span class="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded uppercase tracking-wider">Abandoned</span>
       </div>
     </div>
     
     <div class="flex flex-col flex-1 p-4">
       <h3 class="text-white font-bold text-lg leading-tight line-clamp-2 mb-1" :title="book.title">
-        <span v-if="book.series_sequence" class="inline-block px-1.5 py-0.5 bg-brand-primary/20 text-brand-primary text-[10px] font-bold rounded mr-1 align-middle backdrop-blur-sm">
+        <span v-if="book.series_sequence" class="inline-block px-1.5 py-0.5 bg-brand-primary/20 text-brand-primary text-[10px] font-bold rounded mr-1 align-middle">
           #{{ book.series_sequence }}
         </span>
         {{ book.title }}

@@ -6,7 +6,7 @@
       <div class="absolute top-[30%] right-[10%] w-[30%] h-[30%] rounded-full bg-brand-accent/10 blur-[80px]"></div>
     </div>
 
-    <div class="max-w-md w-full space-y-8 bg-slate-900/80 backdrop-blur-xl p-8 rounded-2xl shadow-2xl border border-white/10 relative z-10">
+    <div class="max-w-md w-full space-y-8 bg-brand-card p-8 rounded-md shadow-md border border-white/5 relative z-10">
       <div class="text-center">
         <h2 class="mt-2 text-3xl font-bold text-white tracking-tight">
           Welcome Back

@@ -7,10 +7,12 @@ export default {
     theme: {
         extend: {
             colors: {
-                // Custom colors for premium feel
-                'brand-dark': '#0f172a',
-                'brand-primary': '#3b82f6',
-                'brand-accent': '#6366f1',
+                // Audiobookshelf inspired colors
+                'brand-dark': '#333333',    // Main Background
+                'brand-card': '#444444',    // Card Background
+                'brand-header': '#252525',  // Header Background
+                'brand-primary': '#4caf50', // ABS Green
+                'brand-accent': '#4caf50',  // Mapped to primary for now
             }
         },
     },

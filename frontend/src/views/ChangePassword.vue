@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-md mx-auto space-y-8 animate-fade-in bg-slate-800/30 p-8 rounded-2xl border border-white/5 backdrop-blur-sm shadow-xl mt-8">
+  <div class="max-w-md mx-auto space-y-8 animate-fade-in bg-brand-card p-8 rounded-md shadow-sm mt-8">
     <div>
       <h2 class="text-2xl font-bold text-white">Change Password</h2>
       <p class="text-gray-400 text-sm mt-1">Update your account credentials</p>

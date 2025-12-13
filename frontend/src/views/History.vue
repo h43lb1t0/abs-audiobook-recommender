@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-8 animate-fade-in">
-    <div class="bg-slate-800/30 p-6 rounded-2xl border border-white/5 backdrop-blur-sm shadow-xl">
+    <div class="bg-brand-card p-6 rounded-md shadow-sm">
       <h2 class="text-2xl font-bold text-white mb-2">Listening History</h2>
       <p class="text-gray-400 font-medium" v-if="loading">Loading history...</p>
       <p class="text-gray-400 font-medium" v-else>{{ books.length }} book{{ books.length !== 1 ? 's' : '' }} finished &middot; {{ ratedCount }} rated</p>
@@ -17,7 +17,7 @@
     <template v-else>
        <!-- Series Groups -->
        <div v-for="(group, seriesName) in seriesGroups" :key="seriesName" class="space-y-4">
-         <div class="flex items-center gap-4 py-2 border-b border-white/5 bg-gradient-to-r from-white/5 to-transparent px-4 -mx-4">
+         <div class="flex items-center gap-4 py-2 border-b border-white/5 px-4 -mx-4">
            <h3 class="text-xl font-bold text-white">{{ seriesName }}</h3>
            <span class="text-xs font-mono bg-slate-800 text-gray-400 px-2 py-1 rounded-full">{{ group.length }} books</span>
          </div>
