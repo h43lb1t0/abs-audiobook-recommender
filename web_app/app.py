@@ -87,7 +87,7 @@ def init_db():
             hashed_root_pw = generate_password_hash(root_password)
             new_root = User(
                 id='root',
-                username='root',
+                username=os.getenv('ROOT_USERNAME', 'root'),
                 password=hashed_root_pw
             )
             db.session.add(new_root)
