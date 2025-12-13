@@ -10,17 +10,17 @@
           </router-link>
           <div class="hidden md:block">
             <div class="ml-10 flex items-baseline space-x-4">
-              <router-link to="/" 
+              <router-link v-if="user?.id !== 'root'" to="/" 
                 class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200"
                 active-class="bg-brand-primary/20 text-brand-primary">
                 {{ $t('nav.home') }}
               </router-link>
-              <router-link to="/history" 
+              <router-link v-if="user?.id !== 'root'" to="/history" 
                 class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200"
                 active-class="bg-brand-primary/20 text-brand-primary">
                  {{ $t('nav.history') }}
               </router-link>
-              <router-link to="/in-progress" 
+              <router-link v-if="user?.id !== 'root'" to="/in-progress" 
                 class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200"
                 active-class="bg-brand-primary/20 text-brand-primary">
                  {{ $t('nav.inProgress') }}
@@ -72,17 +72,17 @@
     <!-- Mobile menu -->
     <div v-show="mobileMenuOpen" class="md:hidden bg-brand-header border-b border-white/10">
       <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-        <router-link to="/" 
+        <router-link v-if="user?.id !== 'root'" to="/" 
           class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
           active-class="bg-brand-primary/20 text-brand-primary">
           {{ $t('nav.home') }}
         </router-link>
-        <router-link to="/history" 
+        <router-link v-if="user?.id !== 'root'" to="/history" 
           class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
           active-class="bg-brand-primary/20 text-brand-primary">
           {{ $t('nav.history') }}
         </router-link>
-        <router-link to="/in-progress" 
+        <router-link v-if="user?.id !== 'root'" to="/in-progress" 
           class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
           active-class="bg-brand-primary/20 text-brand-primary">
            {{ $t('nav.inProgress') }}

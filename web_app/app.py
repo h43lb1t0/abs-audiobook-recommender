@@ -148,9 +148,17 @@ def login():
                 logger.debug("Password match. Logging in.")
 
                 login_user(user)
+                target_url = url_for('index')
+                if user.id == 'root':
+                    target_url = '/admin'
+
                 if request.is_json:
-                    return jsonify({"success": True, "user": {"id": user.id, "username": user.username}})
-                return redirect(url_for('index'))
+                    return jsonify({
+                        "success": True, 
+                        "user": {"id": user.id, "username": user.username},
+                        "redirect": target_url
+                    })
+                return redirect(target_url)
             else:
                 logger.debug("Password mismatch.")
                 if request.is_json:
@@ -275,15 +283,26 @@ def settings():
     """
     return app.send_static_file('dist/index.html')
 
+@app.route('/admin')
+@login_required
+def admin():
+    """
+    Returns the admin page
+    """
+    return app.send_static_file('dist/index.html')
+
 @app.route('/api/listening-history')
 @login_required
 def get_listening_history():
     """
     Returns the user's finished books with their ratings
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+
     try:
-        items_map, _ = get_all_items()
-        finished_ids, _, _ = get_finished_books(items_map, user_id=current_user.id)
+        items_map, unused = get_all_items()
+        finished_ids, unused1, unused2 = get_finished_books(items_map, user_id=current_user.id)
         
         
         # Get user's ratings from database
@@ -333,9 +352,12 @@ def get_in_progress():
     """
     Returns the user's in-progress books
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+
     try:
-        items_map, _ = get_all_items()
-        _, in_progress_ids, _ = get_finished_books(items_map, user_id=current_user.id)
+        items_map, unused = get_all_items()
+        unused1, in_progress_ids, unused2 = get_finished_books(items_map, user_id=current_user.id)
         
         in_progress_books = []
         for book_id, progress in in_progress_ids.items():
@@ -393,6 +415,9 @@ def rate_book():
     """
     Saves or updates a book rating for the current user
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+
     try:
         data = request.get_json()
         book_id = data.get('book_id')
@@ -427,6 +452,8 @@ def get_ratings():
     """
     Returns all ratings for the current user
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
     try:
         user_ratings = UserLib.query.filter_by(user_id=current_user.id).all()
         ratings = {r.book_id: r.rating for r in user_ratings if r.rating is not None}
@@ -441,6 +468,9 @@ def abandon_book():
     """
     Marks a book as abandoned.
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+
     try:
         data = request.get_json()
         book_id = data.get('book_id')
@@ -483,6 +513,9 @@ def reactivate_book():
     """
     Marks a book as reading (reactivates an abandoned book).
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+
     try:
         data = request.get_json()
         book_id = data.get('book_id')
@@ -510,6 +543,9 @@ def recommend():
     """
     Returns the recommendations
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+
     refresh = request.args.get('refresh', 'false').lower() == 'true'
     
     try:

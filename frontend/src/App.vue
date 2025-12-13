@@ -42,9 +42,13 @@ const checkAuth = async () => {
       locale.value = user.value.language
     }
     
-    // If on login page and authenticated, redirect home
+    // If on login page and authenticated, redirect home or admin
     if (route.path === '/login' && isAuthenticated.value) {
-      router.push('/')
+      if (user.value.id === 'root') {
+        router.push('/admin')
+      } else {
+        router.push('/')
+      }
     }
   } catch (error) {
     isAuthenticated.value = false
@@ -75,8 +79,15 @@ onMounted(() => {
 
 // Enforce strict routing rules and auth checks
 watch([() => user.value, () => route.path], ([newUser, newPath]) => {
-  if (newUser && newUser.force_password_change && newPath !== '/settings') {
-      router.replace('/settings')
+  if (newUser) {
+      if (newUser.force_password_change && newPath !== '/settings') {
+          router.replace('/settings')
+      } else if (newUser.id === 'root') {
+          const allowedPaths = ['/admin', '/settings', '/login'] // login is allowed as we might be redirecting out of it
+          if (!allowedPaths.includes(newPath)) {
+              router.replace('/admin')
+          }
+      }
   }
 })
 </script>
