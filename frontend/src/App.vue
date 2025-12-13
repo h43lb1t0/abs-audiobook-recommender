@@ -62,6 +62,8 @@ const checkAuth = async () => {
   }
 }
 
+provide('checkAuth', checkAuth)
+
 const forceSync = async () => {
   if (!confirm('Are you sure you want to force sync the library? This might take a while.')) return;
   

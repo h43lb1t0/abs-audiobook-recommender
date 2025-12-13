@@ -93,15 +93,6 @@ def init_db():
             db.session.add(new_root)
             db.session.commit()
             logger.info("Root user created.")
-        
-        # Check for force_password_change column and add it if missing (Manual Migration)
-        inspector = inspect(db.engine)
-        columns = [col['name'] for col in inspector.get_columns('users')]
-        if 'force_password_change' not in columns:
-            logger.info("Adding force_password_change column to users table")
-            with db.engine.connect() as conn:
-                conn.execute(text("ALTER TABLE users ADD COLUMN force_password_change BOOLEAN DEFAULT 0"))
-                conn.commit()
 
         sync_abs_users()
 
@@ -191,14 +182,14 @@ def change_password():
             if request.is_json:
                 return jsonify({"error": _("Incorrect current password")}), 400
             flash(_('Incorrect current password'))
-        elif new_password != confirm_password:
-             if request.is_json:
-                return jsonify({"error": _("New passwords do not match")}), 400
-             flash(_('New passwords do not match'))
         elif check_password_hash(current_user.password, new_password):
              if request.is_json:
                 return jsonify({"error": _("New password cannot be the same as the current password")}), 400
              flash(_('New password cannot be the same as the current password'))
+        elif new_password != confirm_password:
+             if request.is_json:
+                return jsonify({"error": _("New passwords do not match")}), 400
+             flash(_('New passwords do not match'))
         else:
             current_user.password = generate_password_hash(new_password)
             current_user.force_password_change = False

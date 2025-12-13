@@ -54,23 +54,10 @@ const isError = ref(false)
 const router = useRouter()
 const { t } = useI18n()
 
-// Check if user is forced to change password (passed from App.vue or check auth status typically)
-// Ideally we should get this from a store or prop, but for now we can check the auth status or let the router guard handle it.
-// Actually, App.vue passes nothing? Wait, App.vue passes nothing to router-view except Component.
-// Let's assume we can fetch it or we can trust the user knows why they are here.
-// Better: Check local storage or re-fetch auth?
-// Simplest: Check if we have the user state available. 
-// Since App.vue doesn't provide user to children easily without provide/inject or store.
-// Let's rely on checking the API again or assume App.vue handles the redirect.
-// BUT for the message, we need to know.
-
 import { inject } from 'vue'
-const userFromApp = inject('userCheckResult') // We didn't provide this yet
-// Let's verify App.vue again. It doesn't provide user.
 
-// Alternative: fetch auth status here too or use a sophisticated store.
-// Let's use a simple fetch to check if we should show the "Forced" message.
 const isForced = ref(false)
+const checkAuth = inject('checkAuth')
 
 const checkForced = async () => {
     try {
@@ -116,7 +103,12 @@ const updatePassword = async () => {
         newPassword.value = ''
         confirmPassword.value = ''
         
-        setTimeout(() => window.location.href = '/', 1500)
+        // Refresh auth state to update force_password_change in App.vue
+        if (checkAuth) {
+            await checkAuth()
+        }
+        
+        setTimeout(() => router.push('/'), 1500)
     }
   } catch (err) {
     isError.value = true
