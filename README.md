@@ -93,9 +93,13 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     -   **Standard Users**: Log in with your Audiobookshelf username. 
         -   **Initial Password**: Same as your username.
         -   **First Login**: You will be **forced** to change your password immediately upon your first successful login.
-    -   **Admin User**: A `root` user is created automatically.
-        -   **Default Password**: `admin`.
-        -   Can be changed via `ROOT_PASSWORD` environment variable.
+    -   **Admin User**: A `root` user is created automatically to manage the application.
+        -   **Capabilities**: 
+            -   View all registered users.
+            -   Reset user passwords.
+            -   Force a library synchronization.
+        -   **Limitations**: Cannot be used to view recommendations or track listening history.
+        -   **Default Login**: `root` / `admin` (change via `ROOT_USERNAME`/`ROOT_PASSWORD` environment variable).
     
     **Settings:** Click the gear icon to change your language or update your password manually.
 
