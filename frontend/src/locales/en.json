@@ -48,7 +48,8 @@
         "success": "Password updated successfully",
         "mismatch": "New passwords do not match",
         "error": "Failed to update password",
-        "forcedMessage": "You must change your password before continuing."
+        "forcedMessage": "You must change your password before continuing.",
+        "tooShort": "Password must be at least 4 characters long"
     },
     "login": {
         "welcome": "Welcome Back",

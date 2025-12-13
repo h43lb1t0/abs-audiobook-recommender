@@ -85,6 +85,12 @@ const checkForced = async () => {
 checkForced()
 
 const updatePassword = async () => {
+  if (newPassword.value.length < 4) {
+    message.value = t('changePassword.tooShort')
+    isError.value = true
+    return
+  }
+
   if (newPassword.value !== confirmPassword.value) {
     message.value = t('changePassword.mismatch')
     isError.value = true
