@@ -28,11 +28,17 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     -   Books are grouped by series and sorted by sequence number.
     -   Ratings are saved to a local database for future use in recommendations.
 -   **Web Interface**: A clean, responsive UI to view recommendations.
+-   **Multilingual Support**: Fully localized interface in **English** and **German** with persistent user preferences.
+-   **Enhanced UI**:
+    -   **Clickable Covers**: Direct links to your Audiobookshelf book pages.
+    -   **Expandable Descriptions**: Read full book summaries directly in the card.
+    -   **Settings Overlay**: Easy access to language selection and password management.
 -   **Privacy Focused**: All analysis happens locally. Book data is only sent to your local LLM (if configured).
 
 ## Prerequisites
 
 -   **Python 3.13+**
+-   **Node.js 18+ & npm** (Required for building the frontend)
 -   **Audiobookshelf Server**
 -   **(Optional) LLM Server**: Required only if you want AI-generated explanations. Any OpenAI-compatible server (like `llama.cpp`'s `llama-server`) works.
 
@@ -50,7 +56,16 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     uv sync
     ```
 
-3.  **Configure Environment Variables:**
+3.  **Build Frontend:**
+    Navigate to the frontend directory, install dependencies, and build the static assets:
+    ```bash
+    cd frontend
+    npm install
+    npm run build
+    cd ..
+    ```
+
+4.  **Configure Environment Variables:**
     Create a `.env` file in the root directory:
 
     ```env
@@ -58,8 +73,6 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     ABS_TOKEN=your-audiobookshelf-api-token
     # Optional: Only needed for AI reasons
     LLAMA_SERVER_URL=http://localhost:8080/v1/chat/completions
-    # Optional: Language code (default: en)
-    LANGUAGE=en
     # Optional: Limit to specific library ID
     ABS_LIB=
     ```
@@ -74,7 +87,9 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
 2.  **View Recommendations:**
     Open `http://localhost:5000` in your browser.
     
-    **Login:** Use your Audiobookshelf username. The initial password is the same as your username (you can change it after logging in).
+    **Login:** Use your Audiobookshelf username. The initial password is the same as your username.
+    
+    **Settings:** Click the gear icon to change your language or update your password.
 
 ## Developer Info
 
@@ -94,6 +109,9 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
 
 See [RECOMMENDATION_ALGO.md](docs/RECOMMENDATION_ALGO.md) for a deep dive into the algorithm.
 
+### Adding New Languages
+Want to contribute a translation? See [Adding a New Language](docs/add_new_language.md).
+
 ## Roadmap
 
 - [x] Choose what ABS library to use (multiple libraries?)
@@ -104,7 +122,7 @@ See [RECOMMENDATION_ALGO.md](docs/RECOMMENDATION_ALGO.md) for a deep dive into t
 - [x] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the LLM
 - [x] A page for books in progress with the option to mark them as abandoned (also used for recommendations algorithm)
 - [ ] Docker containerization for easier deployment
-- [ ] Enhanced UI/UX design
+- [x] Enhanced UI/UX design
 - [ ] ~~Additional filtering options (e.g., by genre, length, narrator)~~
 - [x] Support for other AI models/providers
 - [ ] Mobile-friendly design
