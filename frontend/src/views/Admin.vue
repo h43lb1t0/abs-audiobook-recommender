@@ -72,7 +72,7 @@
                 
                     <div>
                         <label class="block text-sm font-medium text-gray-300 mb-1">{{ $t('admin.newPassword') }}</label>
-                        <input type="text" v-model="newPassword" class="block w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all">
+                        <input type="password" v-model="newPassword" class="block w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all">
                     </div>
                 </div>
               </div>

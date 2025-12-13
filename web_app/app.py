@@ -88,7 +88,9 @@ def init_db():
             new_root = User(
                 id='root',
                 username=os.getenv('ROOT_USERNAME', 'root'),
-                password=hashed_root_pw
+                password=hashed_root_pw,
+                language='en',
+                force_password_change=False
             )
             db.session.add(new_root)
             db.session.commit()
