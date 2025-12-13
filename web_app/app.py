@@ -87,8 +87,10 @@ def init_db():
             hashed_root_pw = generate_password_hash(root_password)
             new_root = User(
                 id='root',
-                username='root',
-                password=hashed_root_pw
+                username=os.getenv('ROOT_USERNAME', 'root'),
+                password=hashed_root_pw,
+                language='en',
+                force_password_change=False
             )
             db.session.add(new_root)
             db.session.commit()
@@ -148,9 +150,17 @@ def login():
                 logger.debug("Password match. Logging in.")
 
                 login_user(user)
+                target_url = url_for('index')
+                if user.id == 'root':
+                    target_url = '/admin'
+
                 if request.is_json:
-                    return jsonify({"success": True, "user": {"id": user.id, "username": user.username}})
-                return redirect(url_for('index'))
+                    return jsonify({
+                        "success": True, 
+                        "user": {"id": user.id, "username": user.username},
+                        "redirect": target_url
+                    })
+                return redirect(target_url)
             else:
                 logger.debug("Password mismatch.")
                 if request.is_json:
@@ -275,15 +285,28 @@ def settings():
     """
     return app.send_static_file('dist/index.html')
 
+@app.route('/admin')
+@login_required
+def admin():
+    """
+    Returns the admin page
+    """
+    if current_user.id != 'root':
+        flash(_('Unauthorized'))
+    return redirect(url_for('index'))
+
 @app.route('/api/listening-history')
 @login_required
 def get_listening_history():
     """
     Returns the user's finished books with their ratings
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+
     try:
-        items_map, _ = get_all_items()
-        finished_ids, _, _ = get_finished_books(items_map, user_id=current_user.id)
+        items_map, unused = get_all_items()
+        finished_ids, unused1, unused2 = get_finished_books(items_map, user_id=current_user.id)
         
         
         # Get user's ratings from database
@@ -333,9 +356,12 @@ def get_in_progress():
     """
     Returns the user's in-progress books
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+
     try:
-        items_map, _ = get_all_items()
-        _, in_progress_ids, _ = get_finished_books(items_map, user_id=current_user.id)
+        items_map, unused = get_all_items()
+        unused1, in_progress_ids, unused2 = get_finished_books(items_map, user_id=current_user.id)
         
         in_progress_books = []
         for book_id, progress in in_progress_ids.items():
@@ -393,6 +419,9 @@ def rate_book():
     """
     Saves or updates a book rating for the current user
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+
     try:
         data = request.get_json()
         book_id = data.get('book_id')
@@ -427,6 +456,8 @@ def get_ratings():
     """
     Returns all ratings for the current user
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
     try:
         user_ratings = UserLib.query.filter_by(user_id=current_user.id).all()
         ratings = {r.book_id: r.rating for r in user_ratings if r.rating is not None}
@@ -441,6 +472,9 @@ def abandon_book():
     """
     Marks a book as abandoned.
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+
     try:
         data = request.get_json()
         book_id = data.get('book_id')
@@ -483,6 +517,9 @@ def reactivate_book():
     """
     Marks a book as reading (reactivates an abandoned book).
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+
     try:
         data = request.get_json()
         book_id = data.get('book_id')
@@ -510,6 +547,9 @@ def recommend():
     """
     Returns the recommendations
     """
+    if current_user.id == 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+
     refresh = request.args.get('refresh', 'false').lower() == 'true'
     
     try:
@@ -671,6 +711,67 @@ def force_sync():
         return jsonify({"status": "success", "message": "Indexing triggered"})
     except Exception as e:
         logger.error(f"Error in force sync: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/users', methods=['GET'])
+@login_required
+def get_users():
+    """
+    Returns all users (Root only)
+    """
+    if current_user.id != 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+    
+    try:
+        users = User.query.all()
+        user_list = []
+        for user in users:
+            user_list.append({
+                "id": user.id,
+                "username": user.username,
+                "language": user.language,
+                "force_password_change": user.force_password_change
+            })
+        return jsonify(user_list)
+    except Exception as e:
+        logger.error(f"Error fetching users: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/change-user-password', methods=['POST'])
+@login_required
+def admin_change_password():
+    """
+    Changes a user's password (Root only)
+    """
+    if current_user.id != 'root':
+        return jsonify({"error": _("Unauthorized")}), 403
+    
+    try:
+        data = request.get_json()
+        target_user_id = data.get('user_id')
+        new_password = data.get('new_password')
+        
+        if not target_user_id or not new_password:
+            return jsonify({"error": _("user_id and new_password are required")}), 400
+            
+        if len(new_password) < 4:
+            return jsonify({"error": _("Password must be at least 4 characters long")}), 400
+            
+        target_user = db.session.get(User, target_user_id)
+        if not target_user:
+            return jsonify({"error": _("User not found")}), 404
+            
+        if check_password_hash(target_user.password, new_password):
+             return jsonify({"error": _("New password cannot be the same as the current password")}), 400
+
+        target_user.password = generate_password_hash(new_password)
+        target_user.force_password_change = True
+        
+        db.session.commit()
+        logger.info(f"Password for user {target_user.username} changed by root.")
+        return jsonify({"success": True, "message": _("Password updated successfully")})
+    except Exception as e:
+        logger.error(f"Error changing user password: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/debug/force-check')

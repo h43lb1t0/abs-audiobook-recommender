@@ -4,6 +4,7 @@
         "history": "History",
         "inProgress": "In Progress",
         "settings": "Settings",
+        "admin": "Admin",
         "forceSync": "Force Sync",
         "logout": "Logout"
     },
@@ -66,5 +67,23 @@
         "error": "An unexpected error occurred",
         "booksCount": "{count} book | {count} books",
         "abandoned": "Abandoned"
+    },
+    "admin": {
+        "title": "User Management",
+        "username": "Username",
+        "userId": "User ID",
+        "status": "Status",
+        "actions": "Actions",
+        "resetPassword": "Reset Password",
+        "resetPending": "Reset Pending",
+        "resetPasswordFor": "Reset Password for {username}",
+        "resetPasswordDescription": "Enter a new temporary password for this user. They will be forced to change it upon next login.",
+        "newPassword": "New Password",
+        "processing": "Processing...",
+        "save": "Save Changes",
+        "cancel": "Cancel",
+        "success": "Password reset successfully",
+        "passwordRequired": "Password is required",
+        "error": "Failed to reset password"
     }
 }

@@ -75,7 +75,11 @@ const handleLogin = async () => {
     
     if (response.data.success) {
       // Reload to ensure auth state is propagated everywhere cleanly
-      window.location.href = '/'
+      if (response.data.redirect) {
+         window.location.href = response.data.redirect
+      } else {
+         window.location.href = '/'
+      }
     }
   } catch (err) {
     if (err.response && err.response.data && err.response.data.error) {

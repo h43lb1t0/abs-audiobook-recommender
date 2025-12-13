@@ -1,12 +1,4 @@
 {
-    "nav": {
-        "home": "Startseite",
-        "history": "Verlauf",
-        "inProgress": "Gerade am Hören",
-        "settings": "Einstellungen",
-        "forceSync": "Sync erzwingen",
-        "logout": "Abmelden"
-    },
     "settings": {
         "title": "Einstellungen",
         "language": "Sprache",
@@ -66,5 +58,32 @@
         "error": "Ein unerwarteter Fehler ist aufgetreten",
         "booksCount": "{count} Buch | {count} Bücher",
         "abandoned": "Abgebrochen"
+    },
+    "admin": {
+        "title": "Benutzerverwaltung",
+        "username": "Benutzername",
+        "userId": "Benutzer-ID",
+        "status": "Status",
+        "actions": "Aktionen",
+        "resetPassword": "Passwort zurücksetzen",
+        "resetPending": "Zurücksetzen ausstehend",
+        "resetPasswordFor": "Passwort zurücksetzen für {username}",
+        "resetPasswordDescription": "Geben Sie ein neues temporäres Passwort für diesen Benutzer ein. Er wird gezwungen, es bei der nächsten Anmeldung zu ändern.",
+        "newPassword": "Neues Passwort",
+        "processing": "Verarbeite...",
+        "save": "Änderungen speichern",
+        "cancel": "Abbrechen",
+        "success": "Passwort erfolgreich zurückgesetzt",
+        "passwordRequired": "Passwort ist erforderlich",
+        "error": "Fehler beim Zurücksetzen des Passworts"
+    },
+    "nav": {
+        "home": "Startseite",
+        "history": "Verlauf",
+        "inProgress": "Gerade am Hören",
+        "settings": "Einstellungen",
+        "admin": "Admin",
+        "forceSync": "Sync erzwingen",
+        "logout": "Abmelden"
     }
 }
