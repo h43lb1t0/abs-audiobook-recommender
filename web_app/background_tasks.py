@@ -71,6 +71,8 @@ def scheduled_user_activity_check(app, socketio_instance):
             
             for user in users:
                 user_id = user.id
+                if user_id == 'root':
+                    continue
                 should_generate = False
                 
                 # Global trigger (New books added)
