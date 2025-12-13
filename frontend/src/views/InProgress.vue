@@ -1,9 +1,9 @@
 <template>
   <div class="space-y-8 animate-fade-in">
     <div class="bg-brand-card p-6 rounded-md shadow-sm">
-      <h2 class="text-2xl font-bold text-white mb-2">Currently Reading</h2>
-      <p class="text-gray-400 font-medium" v-if="loading">Loading books...</p>
-      <p class="text-gray-400 font-medium" v-else>{{ books.length }} book{{ books.length !== 1 ? 's' : '' }} in progress</p>
+      <h2 class="text-2xl font-bold text-white mb-2">{{ $t('inProgress.title') }}</h2>
+      <p class="text-gray-400 font-medium" v-if="loading">{{ $t('inProgress.loading') }}</p>
+      <p class="text-gray-400 font-medium" v-else>{{ $t('inProgress.stats', { count: books.length }, books.length) }}</p>
     </div>
 
     <div v-if="loading" class="flex justify-center py-20">
@@ -20,18 +20,18 @@
        <div v-for="(group, seriesName) in seriesGroups" :key="seriesName" class="space-y-4">
          <div class="flex items-center gap-4 py-2 border-b border-white/5 px-4 -mx-4">
            <h3 class="text-xl font-bold text-white">{{ seriesName }}</h3>
-           <span class="text-xs font-mono bg-slate-800 text-gray-400 px-2 py-1 rounded-full">{{ group.length }} books</span>
+           <span class="text-xs font-mono bg-slate-800 text-gray-400 px-2 py-1 rounded-full">{{ $t('common.booksCount', { count: group.length }, group.length) }}</span>
          </div>
          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
            <BookCard v-for="book in group" :key="book.id" :book="book">
              <template #actions>
                <button v-if="book.status === 'abandoned'" @click="updateStatus(book, 'reading')"
                  class="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-bold tracking-wide transition-all shadow hover:shadow-lg">
-                 Reactivate
+                 {{ $t('inProgress.reactivate') }}
                </button>
                <button v-else @click="updateStatus(book, 'abandoned')"
                  class="w-full py-2 bg-slate-800/50 hover:bg-red-900/30 text-slate-400 hover:text-red-300 border border-slate-700 hover:border-red-900/50 rounded-lg text-sm font-semibold transition-all">
-                 Abandon
+                 {{ $t('inProgress.abandon') }}
                </button>
              </template>
            </BookCard>
@@ -41,19 +41,19 @@
        <!-- Standalone -->
        <div v-if="standaloneBooks.length > 0" class="space-y-4">
          <div class="flex items-center gap-4 py-2 border-b border-white/5 bg-gradient-to-r from-white/5 to-transparent px-4 -mx-4">
-           <h3 class="text-xl font-bold text-white">Standalone Books</h3>
-           <span class="text-xs font-mono bg-slate-800 text-gray-400 px-2 py-1 rounded-full">{{ standaloneBooks.length }} books</span>
+           <h3 class="text-xl font-bold text-white">{{ $t('inProgress.standalone') }}</h3>
+           <span class="text-xs font-mono bg-slate-800 text-gray-400 px-2 py-1 rounded-full">{{ $t('common.booksCount', { count: standaloneBooks.length }, standaloneBooks.length) }}</span>
          </div>
          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
            <BookCard v-for="book in standaloneBooks" :key="book.id" :book="book">
              <template #actions>
                <button v-if="book.status === 'abandoned'" @click="updateStatus(book, 'reading')"
                  class="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-bold tracking-wide transition-all shadow hover:shadow-lg">
-                 Reactivate
+                 {{ $t('inProgress.reactivate') }}
                </button>
                <button v-else @click="updateStatus(book, 'abandoned')"
                  class="w-full py-2 bg-slate-800/50 hover:bg-red-900/30 text-slate-400 hover:text-red-300 border border-slate-700 hover:border-red-900/50 rounded-lg text-sm font-semibold transition-all">
-                 Abandon
+                 {{ $t('inProgress.abandon') }}
                </button>
              </template>
            </BookCard>
@@ -61,7 +61,7 @@
        </div>
        
        <div v-if="books.length === 0" class="text-center py-24">
-         <p class="text-gray-400 text-lg">No books in progress.</p>
+         <p class="text-gray-400 text-lg">{{ $t('inProgress.noBooks') }}</p>
        </div>
     </template>
   </div>

@@ -16,6 +16,7 @@ class User(UserMixin, db.Model):
     id: Mapped[str] = mapped_column(String(255), primary_key=True)
     username: Mapped[str] = mapped_column(String(255), unique=True)
     password: Mapped[str] = mapped_column(String(255))
+    language: Mapped[str] = mapped_column(String(10), default='en')
 
 class UserLib(db.Model):
     """

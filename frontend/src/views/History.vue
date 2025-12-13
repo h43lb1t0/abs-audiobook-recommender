@@ -1,9 +1,9 @@
 <template>
   <div class="space-y-8 animate-fade-in">
     <div class="bg-brand-card p-6 rounded-md shadow-sm">
-      <h2 class="text-2xl font-bold text-white mb-2">Listening History</h2>
-      <p class="text-gray-400 font-medium" v-if="loading">Loading history...</p>
-      <p class="text-gray-400 font-medium" v-else>{{ books.length }} book{{ books.length !== 1 ? 's' : '' }} finished &middot; {{ ratedCount }} rated</p>
+      <h2 class="text-2xl font-bold text-white mb-2">{{ $t('history.title') }}</h2>
+      <p class="text-gray-400 font-medium" v-if="loading">{{ $t('history.loading') }}</p>
+      <p class="text-gray-400 font-medium" v-else>{{ $t('history.stats', { count: books.length, rated: ratedCount }, books.length) }}</p>
     </div>
 
     <div v-if="loading" class="flex justify-center py-20">
@@ -19,7 +19,7 @@
        <div v-for="(group, seriesName) in seriesGroups" :key="seriesName" class="space-y-4">
          <div class="flex items-center gap-4 py-2 border-b border-white/5 px-4 -mx-4">
            <h3 class="text-xl font-bold text-white">{{ seriesName }}</h3>
-           <span class="text-xs font-mono bg-slate-800 text-gray-400 px-2 py-1 rounded-full">{{ group.length }} books</span>
+           <span class="text-xs font-mono bg-slate-800 text-gray-400 px-2 py-1 rounded-full">{{ $t('common.booksCount', { count: group.length }, group.length) }}</span>
          </div>
          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
            <BookCard v-for="book in group" :key="book.id" :book="book">
@@ -35,8 +35,8 @@
        <!-- Standalone -->
        <div v-if="standaloneBooks.length > 0" class="space-y-4">
          <div class="flex items-center gap-4 py-2 border-b border-white/5 bg-gradient-to-r from-white/5 to-transparent px-4 -mx-4">
-           <h3 class="text-xl font-bold text-white">Standalone Books</h3>
-           <span class="text-xs font-mono bg-slate-800 text-gray-400 px-2 py-1 rounded-full">{{ standaloneBooks.length }} books</span>
+           <h3 class="text-xl font-bold text-white">{{ $t('history.standalone') }}</h3>
+           <span class="text-xs font-mono bg-slate-800 text-gray-400 px-2 py-1 rounded-full">{{ $t('common.booksCount', { count: standaloneBooks.length }, standaloneBooks.length) }}</span>
          </div>
          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
            <BookCard v-for="book in standaloneBooks" :key="book.id" :book="book">

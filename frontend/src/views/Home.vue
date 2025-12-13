@@ -3,8 +3,8 @@
     <!-- Header / Controls -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-brand-card p-6 rounded-md shadow-sm">
       <div>
-        <h2 class="text-2xl font-bold text-white mb-2">Welcome Back, {{ user?.username }}</h2>
-        <p class="text-slate-400">Here are some recommendations based on your listening history.</p>
+        <h2 class="text-2xl font-bold text-white mb-2">{{ $t('home.welcome', { username: user?.username }) }}</h2>
+        <p class="text-slate-400">{{ $t('home.subtitle') }}</p>
       </div>
       
       <div class="flex flex-col items-end gap-2">
@@ -14,10 +14,10 @@
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          <span v-else class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> Generate New</span>
+          <span v-else class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> {{ $t('home.generateNew') }}</span>
         </button>
         <span v-if="lastGenerated" class="text-xs text-gray-500 font-mono bg-black/20 px-2 py-1 rounded">
-          Last updated: {{ formatDate(lastGenerated) }}
+          {{ $t('home.lastUpdated', { date: formatDate(lastGenerated) }) }}
         </span>
       </div>
     </div>
@@ -48,7 +48,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
         </svg>
       </div>
-      <p class="text-gray-400 text-lg font-medium">Tap "Generate New" to get started</p>
+      <p class="text-gray-400 text-lg font-medium">{{ $t('home.tapToStart') }}</p>
     </div>
   </div>
 </template>

@@ -9,25 +9,25 @@
     <div class="max-w-md w-full space-y-8 bg-brand-card p-8 rounded-md shadow-md border border-white/5 relative z-10">
       <div class="text-center">
         <h2 class="mt-2 text-3xl font-bold text-white tracking-tight">
-          Welcome Back
+          {{ $t('login.welcome') }}
         </h2>
         <p class="mt-2 text-sm text-gray-400">
-          Sign in to access your audiobook recommendations
+          {{ $t('login.subtitle') }}
         </p>
       </div>
       <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
         <div class="space-y-4">
           <div>
-            <label for="username" class="block text-sm font-medium text-gray-300 mb-1">Username</label>
+            <label for="username" class="block text-sm font-medium text-gray-300 mb-1">{{ $t('login.username') }}</label>
             <input id="username" name="username" type="text" v-model="username" required 
               class="appearance-none block w-full px-4 py-3 border border-gray-700/50 placeholder-gray-500 text-white rounded-xl bg-gray-800/50 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent focus:bg-gray-800 transition-all duration-200" 
-              placeholder="Enter your username">
+              :placeholder="$t('login.usernamePlaceholder')">
           </div>
           <div>
-            <label for="password" class="block text-sm font-medium text-gray-300 mb-1">Password</label>
+            <label for="password" class="block text-sm font-medium text-gray-300 mb-1">{{ $t('login.password') }}</label>
             <input id="password" name="password" type="password" v-model="password" required 
               class="appearance-none block w-full px-4 py-3 border border-gray-700/50 placeholder-gray-500 text-white rounded-xl bg-gray-800/50 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent focus:bg-gray-800 transition-all duration-200" 
-              placeholder="Enter your password">
+              :placeholder="$t('login.passwordPlaceholder')">
           </div>
         </div>
 
@@ -44,7 +44,7 @@
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
             </span>
-            {{ loading ? 'Signing in...' : 'Sign in' }}
+            {{ loading ? $t('login.signingIn') : $t('login.signIn') }}
           </button>
         </div>
       </form>

@@ -1,8 +1,8 @@
 <template>
   <div class="max-w-md mx-auto space-y-8 animate-fade-in bg-brand-card p-8 rounded-md shadow-sm mt-8">
     <div>
-      <h2 class="text-2xl font-bold text-white">Change Password</h2>
-      <p class="text-gray-400 text-sm mt-1">Update your account credentials</p>
+      <h2 class="text-2xl font-bold text-white">{{ $t('changePassword.title') }}</h2>
+      <p class="text-gray-400 text-sm mt-1">{{ $t('changePassword.subtitle') }}</p>
     </div>
 
     <form @submit.prevent="updatePassword" class="space-y-6">
@@ -11,22 +11,22 @@
       </div>
 
       <div>
-        <label class="block text-sm font-medium text-gray-300 mb-1">Current Password</label>
+        <label class="block text-sm font-medium text-gray-300 mb-1">{{ $t('changePassword.currentPassword') }}</label>
         <input type="password" v-model="currentPassword" required class="block w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all">
       </div>
       
       <div>
-        <label class="block text-sm font-medium text-gray-300 mb-1">New Password</label>
+        <label class="block text-sm font-medium text-gray-300 mb-1">{{ $t('changePassword.newPassword') }}</label>
         <input type="password" v-model="newPassword" required class="block w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all">
       </div>
       
       <div>
-        <label class="block text-sm font-medium text-gray-300 mb-1">Confirm New Password</label>
+        <label class="block text-sm font-medium text-gray-300 mb-1">{{ $t('changePassword.confirmNewPassword') }}</label>
         <input type="password" v-model="confirmPassword" required class="block w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all">
       </div>
       
       <button type="submit" :disabled="loading" class="w-full bg-brand-primary hover:bg-brand-primary/90 text-white font-bold py-3 px-4 rounded-lg transition-all shadow-lg hover:shadow-brand-primary/25 disabled:opacity-50">
-        {{ loading ? 'Updating...' : 'Update Password' }}
+        {{ loading ? $t('changePassword.updating') : $t('changePassword.updateButton') }}
       </button>
     </form>
   </div>
@@ -36,6 +36,7 @@
 import { ref } from 'vue'
 import axios from 'axios'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -44,10 +45,11 @@ const loading = ref(false)
 const message = ref('')
 const isError = ref(false)
 const router = useRouter()
+const { t } = useI18n()
 
 const updatePassword = async () => {
   if (newPassword.value !== confirmPassword.value) {
-    message.value = 'New passwords do not match'
+    message.value = t('changePassword.mismatch')
     isError.value = true
     return
   }
@@ -64,7 +66,7 @@ const updatePassword = async () => {
     }) 
     
     if (response.data.success || response.status === 200) { 
-        message.value = 'Password updated successfully'
+        message.value = t('changePassword.success')
         isError.value = false
         // Clear fields
         currentPassword.value = ''
@@ -75,7 +77,7 @@ const updatePassword = async () => {
     }
   } catch (err) {
     isError.value = true
-    message.value = err.response?.data?.error || 'Failed to update password'
+    message.value = err.response?.data?.error || t('changePassword.error')
   } finally {
     loading.value = false
   }

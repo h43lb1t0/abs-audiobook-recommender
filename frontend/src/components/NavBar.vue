@@ -13,17 +13,17 @@
               <router-link to="/" 
                 class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200"
                 active-class="bg-brand-primary/20 text-brand-primary">
-                Home
+                {{ $t('nav.home') }}
               </router-link>
               <router-link to="/history" 
                 class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200"
                 active-class="bg-brand-primary/20 text-brand-primary">
-                History
+                 {{ $t('nav.history') }}
               </router-link>
               <router-link to="/in-progress" 
                 class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200"
                 active-class="bg-brand-primary/20 text-brand-primary">
-                In Progress
+                 {{ $t('nav.inProgress') }}
               </router-link>
             </div>
           </div>
@@ -33,19 +33,19 @@
             <!-- Force Sync for Root -->
              <button v-if="user?.id === 'root'" @click="$emit('force-sync')" 
               class="bg-red-500/10 hover:bg-red-500/20 text-red-500 px-3 py-2 rounded-md text-sm font-medium transition-colors mr-2">
-              Force Sync
+              {{ $t('nav.forceSync') }}
             </button>
             <div class="relative ml-3">
-               <router-link to="/settings" class="text-gray-400 hover:text-white transition-colors">
-                  <span class="sr-only">Settings</span>
+               <button @click="showSettings = true" class="text-gray-400 hover:text-white transition-colors">
+                  <span class="sr-only">{{ $t('nav.settings') }}</span>
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.115 1.115 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.115 1.115 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.115 1.115 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-               </router-link>
+               </button>
             </div>
              <button @click="logout" class="ml-4 text-gray-400 hover:text-white font-medium text-sm transition-colors">
-              Logout
+              {{ $t('nav.logout') }}
             </button>
           </div>
         </div>
@@ -70,37 +70,39 @@
         <router-link to="/" 
           class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
           active-class="bg-brand-primary/20 text-brand-primary">
-          Home
+          {{ $t('nav.home') }}
         </router-link>
         <router-link to="/history" 
           class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
           active-class="bg-brand-primary/20 text-brand-primary">
-          History
+          {{ $t('nav.history') }}
         </router-link>
         <router-link to="/in-progress" 
           class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
           active-class="bg-brand-primary/20 text-brand-primary">
-          In Progress
+           {{ $t('nav.inProgress') }}
         </router-link>
-        <router-link to="/settings" 
-          class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium"
-          active-class="bg-brand-primary/20 text-brand-primary">
-          Change Password
-        </router-link>
+        <button @click="showSettings = true; mobileMenuOpen = false" 
+          class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium w-full text-left">
+          {{ $t('nav.settings') }}
+        </button>
          <button @click="logout" class="w-full text-left text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">
-          Logout
+          {{ $t('nav.logout') }}
         </button>
       </div>
     </div>
+    <SettingsModal v-if="showSettings" @close="showSettings = false" />
   </nav>
 </template>
 
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import SettingsModal from './SettingsModal.vue'
 
 const router = useRouter()
 const mobileMenuOpen = ref(false)
+const showSettings = ref(false)
 const props = defineProps({
   user: Object
 })
