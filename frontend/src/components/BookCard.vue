@@ -24,7 +24,29 @@
         </span>
         {{ book.title }}
       </h3>
-      <p class="text-slate-400 text-sm font-medium mb-3 line-clamp-1">{{ book.author }}</p>
+      <p class="text-slate-400 text-sm font-medium mb-1 line-clamp-1">{{ book.author }}</p>
+
+      <!-- Duration -->
+      <p v-if="book.duration" class="text-xs text-brand-primary mb-2 font-mono flex items-center gap-1">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+        </svg>
+        {{ book.duration }}
+      </p>
+
+      <!-- Description -->
+      <p 
+        v-if="book.description" 
+        @click.stop.prevent="showFullDescription = !showFullDescription"
+        class="text-xs mb-3 leading-relaxed cursor-pointer hover:text-slate-300 transition-colors"
+        :class="{ 
+          'line-clamp-3 text-slate-500': !showFullDescription,
+          'text-white': showFullDescription
+        }"
+        :title="showFullDescription ? 'Click to show less' : 'Click to show more'"
+      >
+        {{ book.description }}
+      </p>
       
       <!-- Slot for extra content like Reason or Rating -->
       <div class="mt-auto">
@@ -40,7 +62,7 @@
 </template>
 
 <script setup>
-import { computed, inject } from 'vue'
+import { computed, inject, ref } from 'vue'
 
 const props = defineProps({
   book: {
@@ -48,6 +70,8 @@ const props = defineProps({
     required: true
   }
 })
+
+const showFullDescription = ref(false)
 
 const absUrl = inject('absUrl', { value: '' }) // Inject ref or default object with value
 

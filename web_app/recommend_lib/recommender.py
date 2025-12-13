@@ -907,6 +907,7 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
         return []
 
 
+                
     # --- NO LLM PATH ---
 
     if not use_llm:
@@ -933,6 +934,8 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
                 'id': book['id'],
                 'title': book['title'],
                 'author': book['author'],
+                'description': book.get('description'),
+                'duration': format_duration(book.get('duration_seconds')),
                 'reason': reason_text,
                 'cover': book['cover']
             })
@@ -1013,6 +1016,8 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
                 'id': original_book['id'],
                 'title': original_book['title'],
                 'author': original_book['author'],
+                'description': original_book.get('description'),
+                'duration': format_duration(original_book.get('duration_seconds')),
                 'reason': rec.get('reason'),
                 'cover': original_book['cover']
             })
@@ -1021,4 +1026,16 @@ def get_recommendations(use_llm: bool = False, user_id: str = None) -> List[Dict
             logger.warning(f"Invalid index between returned by LLM: {rec_index}")
                 
     return final_recommendations
+
+
+def format_duration(seconds):
+    if not seconds:
+        return None
+    
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
 
