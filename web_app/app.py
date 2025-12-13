@@ -63,6 +63,8 @@ babel = Babel(app, locale_selector=get_locale)
 ABS_URL = os.getenv("ABS_URL")
 ABS_TOKEN = os.getenv("ABS_TOKEN")
 
+PUBLIC_ABS_URL = os.getenv("PUBLIC_ABS_URL", ABS_URL)
+
 # Use absolute path for database to avoid instance path confusion
 basedir = Path(__file__).resolve().parent.parent
 db_path = basedir / "instance" / "site.db"
@@ -268,7 +270,7 @@ def auth_status():
                         current_user, "force_password_change", False
                     ),
                 },
-                "abs_url": ABS_URL,
+                "abs_url": PUBLIC_ABS_URL,
             }
         )
     return jsonify({"authenticated": False}), 401
