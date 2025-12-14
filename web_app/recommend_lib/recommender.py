@@ -796,7 +796,7 @@ def get_recommendations(
 
     logger.info(f"Getting recommendations for user: {user.username}")
 
-    items_map, series_counts = get_all_items()
+    items_map = get_all_items()
 
     rag = get_rag_system()
 

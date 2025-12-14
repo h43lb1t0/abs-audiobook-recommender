@@ -34,7 +34,7 @@ def init_rag_system(persist_directory: str = "rag_db_v2") -> None:
 
         try:
             logger.info("Fetching library items for RAG indexing...")
-            items_map, _ = get_all_items()
+            items_map = get_all_items()
             _RAG_INSTANCE.index_library(items_map)
         except Exception as e:
             logger.error(f"Failed to index library during initialization: {e}")

@@ -55,14 +55,12 @@ def get_all_items() -> Tuple[dict, dict]:
     """
     Returns all items from ABS
 
-    A series with more than 10 books is filtered out
-
     Returns:
-        Tuple[dict, dict]: A tuple containing the items map and series counts
+        dict: A map of all items
     """
 
     items_map = {}
-    series_counts = {}
+    items_map = {}
 
     libraries_resp = requests.get(f"{ABS_URL}/api/libraries", headers=HEADERS)
     libraries_resp.raise_for_status()
@@ -108,9 +106,6 @@ def get_all_items() -> Tuple[dict, dict]:
                         series_name = match.group(1)
                         series_sequence = match.group(2)
 
-            if series_name:
-                series_counts[series_name] = series_counts.get(series_name, 0) + 1
-
             description = metadata.get("description", "")
             if description:
                 description = re.sub(r"<[^>]+>", "", description)
@@ -142,7 +137,7 @@ def get_all_items() -> Tuple[dict, dict]:
                 if authors:
                     items_map[item["id"]]["author"] = authors[0].get("name")
 
-    return items_map, series_counts
+    return items_map
 
 
 def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, set]:
