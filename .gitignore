@@ -10,7 +10,8 @@ wheels/
 .venv
 
 # Environment variables
-.env
+.env*
+!.env.example
 
 # Instance directory
 Instance

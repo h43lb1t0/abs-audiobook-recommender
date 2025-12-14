@@ -1,3 +1,5 @@
+import sys
+from logging.handlers import RotatingFileHandler
 import logging
 
 LOG_FILE = "app.log"
@@ -10,7 +12,12 @@ def setup_logging():
     )
 
     # File handler (DEBUG)
-    file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    if sys.platform == "win32":
+        file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    else:
+        file_handler = RotatingFileHandler(
+            LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+        )
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.DEBUG)
 

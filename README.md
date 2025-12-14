@@ -50,23 +50,16 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     cd ABS_vorschlaege
     ```
 
-2.  **Install dependencies:**
-    This project uses [`uv`](https://docs.astral.sh/uv/) for fast dependency management.
+2.  **Run the install script:**
+    This script will install all dependencies (including `uv`, Python, Node.js), build the frontend, and optionally set up a systemd service.
+    > [!WARNING] 
+    > The script will download and execute a script from the internet. Verify the contents of every file before running it!
     ```bash
-    uv sync
+    bash scripts/install.sh
     ```
 
-3.  **Build Frontend:**
-    Navigate to the frontend directory, install dependencies, and build the static assets:
-    ```bash
-    cd frontend
-    npm install
-    npm run build
-    cd ..
-    ```
-
-4.  **Configure Environment Variables:**
-    Create a `.env` file in the root directory:
+3.  **Configure Environment Variables:**
+    The install script creates a `.env` file for you. Open it and add your details:
 
     ```env
     ABS_URL=http://your-audiobookshelf-url
@@ -133,7 +126,8 @@ Want to contribute a translation? See [Adding a New Language](docs/add_new_langu
 - [x] Scoring system for your audiobooks (Listening History with 1-5 star ratings)
 - [x] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the LLM
 - [x] A page for books in progress with the option to mark them as abandoned (also used for recommendations algorithm)
-- [ ] Docker containerization for easier deployment
+- [x] Install and Uninstall scripts
+- [ ] ~~Docker containerization for easier deployment~~
 - [x] Enhanced UI/UX design
 - [ ] ~~Additional filtering options (e.g., by genre, length, narrator)~~
 - [x] Support for other AI models/providers
