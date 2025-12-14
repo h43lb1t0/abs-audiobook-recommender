@@ -56,6 +56,8 @@ fi
 DEFAULT_USER=$(whoami)
 DEFAULT_PORT=5000
 DEFAULT_HOST="0.0.0.0"
+DEFAULT_WORKERS=2
+DEFAULT_THREADS=4
 SERVICE_NAME="abs-recommender"
 
 read -p "Enter service name [$SERVICE_NAME]: " INPUT_NAME
@@ -66,6 +68,12 @@ SERVICE_USER=${SERVICE_USER:-$DEFAULT_USER}
 
 read -p "Enter port to listen on [$DEFAULT_PORT]: " SERVICE_PORT
 SERVICE_PORT=${SERVICE_PORT:-$DEFAULT_PORT}
+
+read -p "Enter number of workers [$DEFAULT_WORKERS]: " SERVICE_WORKERS
+SERVICE_WORKERS=${SERVICE_WORKERS:-$DEFAULT_WORKERS}
+
+read -p "Enter number of threads [$DEFAULT_THREADS]: " SERVICE_THREADS
+SERVICE_THREADS=${SERVICE_THREADS:-$DEFAULT_THREADS}
 
 VENV_PATH="$PROJECT_ROOT/.venv"
 GUNICORN_PATH="$VENV_PATH/bin/gunicorn"
@@ -84,7 +92,7 @@ After=network.target
 User=$SERVICE_USER
 WorkingDirectory=$PROJECT_ROOT
 Environment=\"PATH=$VENV_PATH/bin:/usr/local/bin:/usr/bin:/bin\"
-ExecStart=$GUNICORN_PATH --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 --bind $DEFAULT_HOST:$SERVICE_PORT web_app.wsgi:application
+ExecStart=$GUNICORN_PATH --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w $SERVICE_WORKERS --threads $SERVICE_THREADS --bind $DEFAULT_HOST:$SERVICE_PORT web_app.wsgi:application
 Restart=always
 
 [Install]
