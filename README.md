@@ -153,7 +153,8 @@ Want to contribute a translation? See [Adding a New Language](docs/add_new_langu
 - [x] Enhanced UI/UX design
 - [ ] Option for users to select what filters to use for recommendations
 - [ ] Option for users to dislike recommendations
-- [ ] Use information if a user has finished recommended books to improve recommendations 
+- [ ] Use information if a user has finished recommended books to improve recommendations
+- [ ] Exclude selected series from sequenz filtering
 - [x] Support for other AI models/providers
 - [x] Mobile-friendly design
 
