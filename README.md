@@ -71,7 +71,31 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
     ROOT_PASSWORD=admin
     ```
 
-## Usage
+    ```
+73: 
+74: ## Updating
+75: 
+76: To update the application to the latest version, run the update script:
+77: 
+78: ```bash
+79: ./scripts/update.sh
+80: ```
+81: 
+82: This script will:
+83: 1.  Stop the systemd service (if installed).
+84: 2.  Pull the latest changes from the repository.
+85: 3.  Smartly check and update Python and Node.js dependencies only if needed.
+86: 4.  Rebuild the frontend if necessary.
+87: 5.  Restart the systemd service.
+88: 
+89: **Force Update:**
+90: If you encounter issues or want to ensure a completely clean state, use the `--force` flag to reinstall all dependencies and rebuild the frontend regardless of changes:
+91: 
+92: ```bash
+93: ./scripts/update.sh --force
+94: ```
+95: 
+96: ## Usage
 
 1.  **Start the Web App:**
     ```bash

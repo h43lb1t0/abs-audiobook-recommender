@@ -22,7 +22,7 @@ from defaults import (
 from dotenv import load_dotenv
 from recommend_lib.abs_api import get_abs_users, get_all_items, get_finished_books
 from recommend_lib.llm import generate_book_recommendations
-from recommend_lib.rag import get_rag_system
+from recommend_lib.rag import get_rag_system, get_duration_bucket
 from sklearn.cluster import KMeans
 from db import LibraryStats
 
