@@ -61,6 +61,46 @@ else
     fi
 fi
 
+# Security Check: Enforce changing default root password AND secret key check
+if [ -f ".env" ]; then
+    # Helper function to get value from .env
+    get_env_value() {
+        grep "^$1=" .env | cut -d'=' -f2-
+    }
+
+    CURRENT_PASSWORD=$(get_env_value "ROOT_PASSWORD")
+    
+    # Check if we are using the default known weak password
+    # Adjust "admin" below if the default in .env.example changes
+    if [ "$CURRENT_PASSWORD" = "admin" ]; then
+        echo ""
+        echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+        echo "SECURITY WARNING: You are using the default root password (admin)"
+        echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+        echo "You MUST change the root password to continue."
+        echo ""
+        
+        while true; do
+            read -p "Enter new root password: " NEW_PASSWORD
+            
+            if [ -z "$NEW_PASSWORD" ]; then
+                echo "Password cannot be empty. Please try again."
+                continue
+            fi
+            
+            if [ "$NEW_PASSWORD" = "admin" ]; then
+                echo "New password cannot be the same as the default 'admin'. Please try again."
+                continue
+            fi
+            
+            sed "s|ROOT_PASSWORD=.*|ROOT_PASSWORD=$NEW_PASSWORD|" .env > .env.tmp && mv .env.tmp .env
+            
+            echo "✓ ROOT_PASSWORD updated successfully."
+            break
+        done
+    fi
+fi
+
 # 1. Install dependencies
 echo "Calling install_dependencies.sh..."
 source "$SCRIPT_DIR/install_dependencies.sh"
