@@ -114,6 +114,9 @@ if [ "$FORCE_UPDATE" = true ] || [ "$OLD_HEAD" != "$NEW_HEAD" ]; then
     fi
 
     if [ "$SHOULD_UPDATE_FRONTEND" = true ]; then
+        # Load NVM if it exists
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
         echo "Updating Frontend..."
         cd frontend
 
