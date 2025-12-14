@@ -13,10 +13,26 @@ if [ ! -f ".env" ]; then
     echo "Creating .env file from .env.example..."
     if [ -f ".env.example" ]; then
         cp .env.example .env
-        echo "✓ .env file created"
+        
+        # Generate SECRET_KEY
+        echo "Generating secure SECRET_KEY..."
+        if command -v python3 &>/dev/null; then
+            SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+        elif command -v python &>/dev/null; then
+            SECRET_KEY=$(python -c 'import secrets; print(secrets.token_hex(32))')
+        else
+            SECRET_KEY="CHANGE_ME_$(date +%s)"
+            echo "Warning: Python not found, using weak SECRET_KEY. Please update it manually."
+        fi
+        
+        # Replace empty SECRET_KEY= with generated key
+        # Use a temporary file for compatibility (sed -i differences on Mac/Linux)
+        sed "s/SECRET_KEY=/SECRET_KEY=$SECRET_KEY/" .env > .env.tmp && mv .env.tmp .env
+        
+        echo "✓ .env file created with generated SECRET_KEY"
         echo ""
         echo "IMPORTANT: A new .env file has been created."
-        echo "Please edit the .env file with your configuration and run this installation script again."
+        echo "Please edit the .env file with your ABS configuration and run this installation script again."
         exit 1
     else
         echo "Warning: .env.example not found. Please create a .env file and run this installation script again."
@@ -24,6 +40,25 @@ if [ ! -f ".env" ]; then
     fi
 else
     echo "✓ .env file already exists"
+    
+    # Check if SECRET_KEY exists and is not empty
+    if ! grep -q "SECRET_KEY=" .env || grep -q "SECRET_KEY=$" .env; then
+        echo "Updating SECRET_KEY in existing .env..."
+        if command -v python3 &>/dev/null; then
+            SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+        elif command -v python &>/dev/null; then
+            SECRET_KEY=$(python -c 'import secrets; print(secrets.token_hex(32))')
+        else
+            SECRET_KEY="CHANGE_ME_$(date +%s)"
+        fi
+        
+        if grep -q "SECRET_KEY=" .env; then
+             sed "s/SECRET_KEY=.*/SECRET_KEY=$SECRET_KEY/" .env > .env.tmp && mv .env.tmp .env
+        else
+             echo "SECRET_KEY=$SECRET_KEY" >> .env
+        fi
+        echo "✓ SECRET_KEY updated"
+    fi
 fi
 
 # 1. Install dependencies
