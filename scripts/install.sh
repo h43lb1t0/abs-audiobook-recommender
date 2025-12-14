@@ -70,14 +70,17 @@ if [ -f ".env" ]; then
 
     CURRENT_PASSWORD=$(get_env_value "ROOT_PASSWORD")
     
-    # Check if we are using the default known weak password
-    # Adjust "admin" below if the default in .env.example changes
-    if [ "$CURRENT_PASSWORD" = "admin" ]; then
+    # Check if password is missing (empty) or is the default "admin"
+    if [ -z "$CURRENT_PASSWORD" ] || [ "$CURRENT_PASSWORD" = "admin" ]; then
         echo ""
         echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-        echo "SECURITY WARNING: You are using the default root password (admin)"
+        if [ -z "$CURRENT_PASSWORD" ]; then
+            echo "SECURITY WARNING: ROOT_PASSWORD is not set or empty"
+        else
+            echo "SECURITY WARNING: You are using the default root password (admin)"
+        fi
         echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-        echo "You MUST change the root password to continue."
+        echo "You MUST set a secure root password to continue."
         echo ""
         
         while true; do
@@ -89,11 +92,18 @@ if [ -f ".env" ]; then
             fi
             
             if [ "$NEW_PASSWORD" = "admin" ]; then
-                echo "New password cannot be the same as the default 'admin'. Please try again."
+                echo "New password cannot be the default 'admin'. Please try again."
                 continue
             fi
             
-            sed "s|ROOT_PASSWORD=.*|ROOT_PASSWORD=$NEW_PASSWORD|" .env > .env.tmp && mv .env.tmp .env
+            # If the key exists (even empty), replace it. If not, append it.
+            if grep -q "^ROOT_PASSWORD=" .env; then
+                sed "s|ROOT_PASSWORD=.*|ROOT_PASSWORD=$NEW_PASSWORD|" .env > .env.tmp && mv .env.tmp .env
+            else
+                # Ensure we have a newline before appending if the file doesn't end with one
+                [ -n "$(tail -c1 .env)" ] && echo "" >> .env
+                echo "ROOT_PASSWORD=$NEW_PASSWORD" >> .env
+            fi
             
             echo "✓ ROOT_PASSWORD updated successfully."
             break

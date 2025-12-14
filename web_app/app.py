@@ -348,7 +348,7 @@ def get_listening_history():
         return jsonify({"error": _("Unauthorized")}), 403
 
     try:
-        items_map, unused = get_all_items()
+        items_map = get_all_items()
         finished_ids, unused1, unused2 = get_finished_books(
             items_map, user_id=current_user.id
         )
@@ -409,7 +409,7 @@ def get_in_progress():
         return jsonify({"error": _("Unauthorized")}), 403
 
     try:
-        items_map, unused = get_all_items()
+        items_map = get_all_items()
         unused1, in_progress_ids, unused2 = get_finished_books(
             items_map, user_id=current_user.id
         )
@@ -802,9 +802,9 @@ def force_sync():
 
     try:
         logger.info("Force sync triggered by root user.")
-        items_map, unused = get_all_items()
+        items_map = get_all_items()
         rag = get_rag_system()
-        rag.index_library(items_map)
+        rag.index_library(items_map, force_reindex=True)
         return jsonify({"status": "success", "message": "Indexing triggered"})
     except Exception as e:
         logger.error(f"Error in force sync: {e}")

@@ -18,7 +18,7 @@ def scheduled_indexing(app):
     with app.app_context():
         logger.info("Starting scheduled library indexing...")
         try:
-            items_map, _ = get_all_items()
+            items_map = get_all_items()
             rag = get_rag_system()
             new_count = rag.index_library(items_map)
 
@@ -102,7 +102,7 @@ def scheduled_user_activity_check(app, socketio_instance):
                         except ValueError:
                             pass
 
-                    items_map, _ = get_all_items()
+                    items_map = get_all_items()
                     get_finished_books(items_map, user_id=user_id)
 
                     recent_changes = UserLib.query.filter(
