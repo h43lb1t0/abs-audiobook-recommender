@@ -150,9 +150,10 @@ Want to contribute a translation? See [Adding a New Language](docs/add_new_langu
 - [x] Periodic background updates with caching to get new recommendations automatically after finishing a book without spamming the LLM
 - [x] A page for books in progress with the option to mark them as abandoned (also used for recommendations algorithm)
 - [x] Install and Uninstall scripts
-- [ ] ~~Docker containerization for easier deployment~~
 - [x] Enhanced UI/UX design
-- [ ] ~~Additional filtering options (e.g., by genre, length, narrator)~~
+- [ ] Option for users to select what filters to use for recommendations
+- [ ] Option for users to dislike recommendations
+- [ ] Use information if a user has finished recommended books to improve recommendations 
 - [x] Support for other AI models/providers
 - [x] Mobile-friendly design
 
