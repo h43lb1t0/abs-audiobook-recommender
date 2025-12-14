@@ -14,8 +14,13 @@ if [ ! -f ".env" ]; then
     if [ -f ".env.example" ]; then
         cp .env.example .env
         echo "✓ .env file created"
+        echo ""
+        echo "IMPORTANT: A new .env file has been created."
+        echo "Please edit the .env file with your configuration and run this installation script again."
+        exit 1
     else
-        echo "Warning: .env.example not found. Skipping .env creation."
+        echo "Warning: .env.example not found. Please create a .env file and run this installation script again."
+        exit 1
     fi
 else
     echo "✓ .env file already exists"
