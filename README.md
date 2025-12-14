@@ -52,6 +52,8 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
 
 2.  **Run the install script:**
     This script will install all dependencies (including `uv`, Python, Node.js), build the frontend, and optionally set up a systemd service.
+    > [!WARNING] 
+    > The script will download and execute a script from the internet. Verify the contents of every file before running it!
     ```bash
     bash scripts/install.sh
     ```
