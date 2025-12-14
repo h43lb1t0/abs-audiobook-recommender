@@ -46,19 +46,18 @@ A personalized recommendation system for your [Audiobookshelf](https://www.audio
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository-url>
+    git clone https://github.com/h43lb1t0/abs-audiobook-recommender
     cd ABS_vorschlaege
     ```
-
+>  [!WARNING] 
+> The script will download and execute a script from the internet. Verify the contents of every file before running it!
 2.  **Run the install script:**
     This script will install all dependencies (including `uv`, Python, Node.js), build the frontend, and optionally set up a systemd service.
-    > [!WARNING] 
-    > The script will download and execute a script from the internet. Verify the contents of every file before running it!
     ```bash
-    bash scripts/install.sh
+    ./scripts/install.sh
     ```
 
-3.  **Configure Environment Variables:**
+4.  **Configure Environment Variables:**
     The install script creates a `.env` file for you. Open it and add your details:
 
     ```env
