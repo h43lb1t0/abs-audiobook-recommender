@@ -802,9 +802,9 @@ def force_sync():
 
     try:
         logger.info("Force sync triggered by root user.")
-        items_map, unused = get_all_items()
+        items_map = get_all_items()
         rag = get_rag_system()
-        rag.index_library(items_map)
+        rag.index_library(items_map, force_reindex=True)
         return jsonify({"status": "success", "message": "Indexing triggered"})
     except Exception as e:
         logger.error(f"Error in force sync: {e}")

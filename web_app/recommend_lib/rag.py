@@ -168,12 +168,15 @@ class RAGSystem:
             f"RAG System initialized with ONNX model. Database path: {self.persist_directory}"
         )
 
-    def index_library(self, items_map: Dict[str, Dict]) -> int:
+    def index_library(
+        self, items_map: Dict[str, Dict], force_reindex: bool = False
+    ) -> int:
         """
         Indexes the library items into ChromaDB.
 
         Args:
             items_map (Dict[str, Dict]): Map of item IDs to item data.
+            force_reindex (bool): If True, clears existing index and reindexes everything.
 
         Returns:
             int: Number of new items indexed.
@@ -185,6 +188,19 @@ class RAGSystem:
 
         # Check existing IDs in content collection (assuming they are synced)
         existing_ids = self.content_collection.get()["ids"]
+
+        if force_reindex:
+            logger.info("Force reindex triggered. Clearing existing collections...")
+            try:
+                # Retrieve all IDs to delete them
+                all_ids = existing_ids
+                if all_ids:
+                    self.content_collection.delete(ids=all_ids)
+                    self.metadata_collection.delete(ids=all_ids)
+                    logger.info(f"Deleted {len(all_ids)} items from collections.")
+                existing_ids = []  # Reset existing_ids as we cleared everything
+            except Exception as e:
+                logger.error(f"Error clearing collections: {e}")
 
         count_new = 0
 
