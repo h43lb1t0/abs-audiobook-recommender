@@ -276,6 +276,14 @@ def auth_status():
     return jsonify({"authenticated": False}), 401
 
 
+@app.route("/api/health")
+def health_check():
+    """
+    Health check endpoint for Docker/container orchestration
+    """
+    return jsonify({"status": "healthy"})
+
+
 @app.route("/logout")
 @login_required
 def logout():
