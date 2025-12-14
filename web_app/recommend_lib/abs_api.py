@@ -113,6 +113,7 @@ def get_all_items() -> Tuple[dict, dict]:
             items_map[item["id"]] = {
                 "id": item["id"],
                 "title": metadata.get("title", item.get("name")),
+                "subtitle": metadata.get("subtitle", ""),
                 "author": metadata.get("authorName", "Unknown"),
                 "narrator": metadata.get("narratorName", "Unknown"),
                 "series": series_name,

@@ -201,6 +201,7 @@ class RAGSystem:
             series = item.get("series", "")
             narrator = item.get("narrator", "")
             description = item.get("description", "")
+            subtitle = item.get("subtitle", "")
 
             # --- Content Embedding (About the book) ---
             content_parts = []
@@ -214,11 +215,13 @@ class RAGSystem:
             content_text = ". ".join(content_parts)
 
             # --- Metadata Embedding (Who/Structure) ---
-            metadata_parts = [f"{item['title']} by {item['author']}"]
+            title_text = item["title"]
+            if subtitle:
+                title_text = f"{title_text}: {subtitle}"
+
+            metadata_parts = [f"{title_text} by {item['author']}"]
             if narrator and narrator != "Unknown":
                 metadata_parts.append(f"Narrated by {narrator}")
-            if series:
-                metadata_parts.append(f"Series: {series}")
             if series:
                 metadata_parts.append(f"Series: {series}")
             # Duration removed from RAG embedding as per new logic
@@ -232,6 +235,7 @@ class RAGSystem:
             metadatas.append(
                 {
                     "title": item["title"],
+                    "subtitle": subtitle or "",
                     "author": item["author"],
                     "narrator": narrator or "",
                     "genres": ",".join(genres) if genres else "",
