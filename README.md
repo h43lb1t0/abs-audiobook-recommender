@@ -155,6 +155,7 @@ Want to contribute a translation? See [Adding a New Language](docs/add_new_langu
 - [ ] Option for users to dislike recommendations
 - [ ] Use information if a user has finished recommended books to improve recommendations
 - [ ] Exclude selected series from sequenz filtering
+- [ ] Handle very large series (like 'Die drei ???') with hundreds of relativly short books without breaking the duration buckets
 - [x] Support for other AI models/providers
 - [x] Mobile-friendly design
 
