@@ -318,11 +318,20 @@ def in_progress():
     return app.send_static_file("dist/index.html")
 
 
-@app.route("/settings")
+@app.route("/account")
 @login_required
-def settings():
+def account():
     """
     Returns the settings page
+    """
+    return app.send_static_file("dist/index.html")
+
+
+@app.route("/recommend-settings")
+@login_required
+def recommend_settings():
+    """
+    Returns the recommend settings page
     """
     return app.send_static_file("dist/index.html")
 

@@ -4,7 +4,8 @@
         "language": "Sprache",
         "changePassword": "Passwort ändern",
         "close": "Schließen",
-        "save": "Speichern"
+        "save": "Speichern",
+        "recommendSettings": "Empfehlungseinstellungen"
     },
     "home": {
         "welcome": "Willkommen zurück, {username}",

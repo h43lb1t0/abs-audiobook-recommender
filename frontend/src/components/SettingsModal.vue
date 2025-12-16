@@ -42,6 +42,12 @@
                         {{ $t('settings.changePassword') }}
                     </button>
                 </div>
+
+                <div class="mb-4">
+                    <button @click="goToRecommendSettings" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary transition-colors">
+                        {{ $t('settings.recommendSettings') }}
+                    </button>
+                </div>
               </div>
             </div>
           </div>
@@ -77,6 +83,11 @@ const changeLocale = async (newLocale) => {
 
 const goToChangePassword = () => {
     emit('close')
-    router.push('/settings')
+    router.push('/account')
+}
+
+const goToRecommendSettings = () => {
+    emit('close')
+    router.push('/recommend-settings')
 }
 </script>

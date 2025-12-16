@@ -13,7 +13,8 @@
         "language": "Language",
         "changePassword": "Change Password",
         "close": "Close",
-        "save": "Save"
+        "save": "Save",
+        "recommendSettings": "Recommend Settings"
     },
     "home": {
         "welcome": "Welcome Back, {username}",

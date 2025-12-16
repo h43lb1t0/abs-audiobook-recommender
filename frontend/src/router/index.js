@@ -11,7 +11,8 @@ const routes = [
     { path: '/login', name: 'Login', component: Login },
     { path: '/history', name: 'History', component: History },
     { path: '/in-progress', name: 'InProgress', component: InProgress },
-    { path: '/settings', name: 'ChangePassword', component: ChangePassword },
+    { path: '/account', name: 'ChangePassword', component: ChangePassword },
+    { path: '/recommend-settings', name: 'RecommendSettings', component: () => import('../views/RecommendSettings.vue') },
     { path: '/admin', name: 'Admin', component: () => import('../views/Admin.vue') },
 ]
 

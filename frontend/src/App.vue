@@ -80,10 +80,10 @@ onMounted(() => {
 // Enforce strict routing rules and auth checks
 watch([() => user.value, () => route.path], ([newUser, newPath]) => {
   if (newUser) {
-      if (newUser.force_password_change && newPath !== '/settings') {
-          router.replace('/settings')
+      if (newUser.force_password_change && newPath !== '/account') {
+          router.replace('/account')
       } else if (newUser.id === 'root') {
-          const allowedPaths = ['/admin', '/settings', '/login'] // login is allowed as we might be redirecting out of it
+          const allowedPaths = ['/admin', '/account', '/login'] // login is allowed as we might be redirecting out of it
           if (!allowedPaths.includes(newPath)) {
               router.replace('/admin')
           }
