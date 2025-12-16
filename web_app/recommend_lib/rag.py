@@ -5,6 +5,7 @@ from pathlib import Path
 import chromadb
 import numpy as np
 import onnxruntime as ort
+from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 from huggingface_hub import hf_hub_download
 from recommend_lib.abs_api import get_all_items
@@ -152,7 +153,10 @@ class RAGSystem:
         if not self.persist_directory.exists():
             self.persist_directory.mkdir()
 
-        self.client = chromadb.PersistentClient(path=self.persist_directory)
+        self.client = chromadb.PersistentClient(
+            path=self.persist_directory,
+            settings=Settings(anonymized_telemetry=False,)
+        )
 
         self.embedding_fn = JinaOnnxEmbeddingFunction(model_repo=model_repo)
 
