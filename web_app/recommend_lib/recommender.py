@@ -1023,7 +1023,11 @@ def get_recommendations(
             )
 
         return final_recommendations
+    else:
+        return llm_path(top_candidates, finished_books_list)
 
+
+def llm_path(top_candidates: List[Dict], finished_books_list: List[Dict]) -> List[Dict]:
     # --- LLM PATH ---
     unread_str = ""
     prompt_book_map = {}  # int id -> book
