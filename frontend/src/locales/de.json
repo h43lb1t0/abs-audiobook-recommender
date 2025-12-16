@@ -11,6 +11,7 @@
         "exclude": "Ausschließen",
         "excludeEveryone": "Für alle ausschließen",
         "excluded": "Ausgeschlossen",
+        "excludedByAdmin": "Vom Admin ausgeschlossen",
         "bookCount": "{count} Bücher"
     },
     "home": {

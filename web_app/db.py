@@ -57,6 +57,22 @@ class UserLib(db.Model):
     )  # ISO8601 string
 
 
+class UserSeriesExcluded(db.Model):
+    __tablename__ = "user_series_excluded"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(255), ForeignKey("users.id"))
+    excluded_for_all: Mapped[bool] = mapped_column(Boolean, default=False)
+    series_id: Mapped[str] = mapped_column(String(255))
+
+    __table_args__ = (
+        CheckConstraint(
+            "excluded_for_all = True OR user_id IS NOT NULL",
+            name="valid_excluded_for_all",
+        ),
+    )
+
+
 class UserRecommendations(db.Model):
     __tablename__ = "user_recommendations"
 

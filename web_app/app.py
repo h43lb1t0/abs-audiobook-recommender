@@ -9,7 +9,8 @@ from pathlib import Path
 
 import requests
 from background_tasks import scheduled_indexing, scheduled_user_activity_check
-from db import User, UserLib, UserRecommendations, db
+from db import User, UserLib, UserRecommendations, UserSeriesExcluded, db
+
 from defaults import BACKGROUND_TASKS
 from dotenv import load_dotenv
 from flask import Flask, Response, flash, jsonify, redirect, request, url_for
@@ -33,6 +34,7 @@ from recommend_lib.abs_api import (
 from recommend_lib.rag import get_rag_system, init_rag_system
 from recommend_lib.recommender import get_recommendations
 from werkzeug.security import check_password_hash, generate_password_hash
+from sqlalchemy import or_
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -658,6 +660,94 @@ def get_series():
         return jsonify(series)
     except Exception as e:
         logger.error(f"Error fetching series: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/series/excluded", methods=["GET"])
+@login_required
+def get_excluded_series():
+    """
+    Returns the list of excluded series IDs for the current user.
+    Returns a dict with 'global' and 'personal' lists.
+    """
+    try:
+        query = UserSeriesExcluded.query.filter(
+            or_(
+                UserSeriesExcluded.user_id == current_user.id,
+                UserSeriesExcluded.excluded_for_all == True,
+            )
+        )
+
+        exclusions = query.all()
+
+        global_excluded = [e.series_id for e in exclusions if e.excluded_for_all]
+        personal_excluded = [
+            e.series_id
+            for e in exclusions
+            if not e.excluded_for_all and e.user_id == current_user.id
+        ]
+
+        return jsonify({"global": global_excluded, "personal": personal_excluded})
+    except Exception as e:
+        logger.error(f"Error fetching excluded series: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/series/exclude", methods=["POST"])
+@login_required
+def exclude_series():
+    """
+    Toggles the exclusion status of a series.
+    Root user toggles 'excluded_for_all'.
+    Normal user toggles personal exclusion.
+    """
+    try:
+        data = request.get_json()
+        series_id = data.get("series_id")
+
+        if not series_id:
+            return jsonify({"error": _("series_id is required")}), 400
+
+        is_root = current_user.id == "root"
+
+        if is_root:
+            # Root toggles global exclusion
+            existing = UserSeriesExcluded.query.filter_by(
+                series_id=series_id, excluded_for_all=True
+            ).first()
+
+            if existing:
+                db.session.delete(existing)
+                status = "removed"
+            else:
+                new_entry = UserSeriesExcluded(
+                    user_id=current_user.id, series_id=series_id, excluded_for_all=True
+                )
+                db.session.add(new_entry)
+                status = "added"
+        else:
+            # Normal user toggles personal exclusion
+            # We explicitly check for excluded_for_all=False to ensure we touch personal records
+            existing = UserSeriesExcluded.query.filter_by(
+                series_id=series_id, user_id=current_user.id, excluded_for_all=False
+            ).first()
+
+            if existing:
+                db.session.delete(existing)
+                status = "removed"
+            else:
+                new_entry = UserSeriesExcluded(
+                    user_id=current_user.id, series_id=series_id, excluded_for_all=False
+                )
+                db.session.add(new_entry)
+                status = "added"
+
+        db.session.commit()
+        return jsonify({"success": True, "status": status, "series_id": series_id})
+
+    except Exception as e:
+        logger.error(f"Error toggling series exclusion: {e}")
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
 

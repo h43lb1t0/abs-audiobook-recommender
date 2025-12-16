@@ -52,12 +52,18 @@
                          <div class="flex-shrink-0 z-10" @click.stop>
                             <button 
                                 @click="toggleExclude(series.id)"
+                                :disabled="excludedGlobal.has(series.id) && user?.id !== 'root'"
                                 :class="[
-                                    excludedSeries.has(series.id) ? 'bg-red-500/20 text-red-400 border-red-500/50' : 'bg-white/5 text-gray-300 border-white/10 hover:bg-white/10',
+                                    excludedGlobal.has(series.id) 
+                                        ? (user?.id === 'root' ? 'bg-red-500/20 text-red-400 border-red-500/50' : 'bg-gray-500/20 text-gray-400 border-gray-500/50 cursor-not-allowed')
+                                        : (excludedPersonal.has(series.id) ? 'bg-red-500/20 text-red-400 border-red-500/50' : 'bg-white/5 text-gray-300 border-white/10 hover:bg-white/10'),
                                     'inline-flex items-center px-2.5 py-1.5 border text-xs font-medium rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary transition-all duration-200'
                                 ]"
                             >
-                                <span v-if="excludedSeries.has(series.id)">{{ $t('settings.excluded') }}</span>
+                                <span v-if="excludedGlobal.has(series.id)">
+                                    {{ user?.id === 'root' ? $t('settings.excludeEveryone') : $t('settings.excludedByAdmin') }}
+                                </span>
+                                <span v-else-if="excludedPersonal.has(series.id)">{{ $t('settings.excluded') }}</span>
                                 <span v-else>
                                     {{ user?.id === 'root' ? $t('settings.excludeEveryone') : $t('settings.exclude') }}
                                 </span>
@@ -83,7 +89,19 @@ const absUrl = inject('absUrl') // Although we use relative paths for api calls
 const user = inject('user')
 const seriesList = ref([])
 const searchQuery = ref('')
-const excludedSeries = ref(new Set()) // Mock Set for excluded IDs
+const excludedPersonal = ref(new Set())
+const excludedGlobal = ref(new Set())
+
+const fetchExcludedSeries = async () => {
+    try {
+        const { data } = await axios.get('/api/series/excluded')
+        // data = { global: [...], personal: [...] }
+        excludedGlobal.value = new Set(data.global)
+        excludedPersonal.value = new Set(data.personal)
+    } catch (e) {
+        console.error("Failed to fetch excluded series", e)
+    }
+}
 
 const fetchSeries = async () => {
     try {
@@ -100,15 +118,41 @@ const filteredSeries = computed(() => {
     return seriesList.value.filter(s => s.name.toLowerCase().includes(lowerQuery))
 })
 
-const toggleExclude = (seriesId) => {
-    if (excludedSeries.value.has(seriesId)) {
-        excludedSeries.value.delete(seriesId)
-    } else {
-        excludedSeries.value.add(seriesId)
+const toggleExclude = async (seriesId) => {
+    // Prevent toggling if it's globally excluded and user is not root
+    if (excludedGlobal.value.has(seriesId) && user?.id !== 'root') {
+        return
+    }
+
+    try {
+        const { data } = await axios.post('/api/series/exclude', { series_id: seriesId })
+        if (data.success) {
+            const isRoot = user?.id === 'root'
+            
+            if (isRoot) {
+                // Root is toggling global exclusion
+                if (data.status === 'added') {
+                    excludedGlobal.value.add(seriesId)
+                } else {
+                    excludedGlobal.value.delete(seriesId)
+                }
+            } else {
+                // Regular user is toggling personal exclusion
+                if (data.status === 'added') {
+                    excludedPersonal.value.add(seriesId)
+                } else {
+                    excludedPersonal.value.delete(seriesId)
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Failed to toggle exclusion", e)
+        alert("Failed to toggle exclusion")
     }
 }
 
 onMounted(() => {
     fetchSeries()
+    fetchExcludedSeries()
 })
 </script>
