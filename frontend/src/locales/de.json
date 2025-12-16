@@ -5,7 +5,13 @@
         "changePassword": "Passwort ändern",
         "close": "Schließen",
         "save": "Speichern",
-        "recommendSettings": "Empfehlungseinstellungen"
+        "recommendSettings": "Empfehlungseinstellungen",
+        "excludeSeriesTitle": "Serien von Sequenzfilterung ausschließen",
+        "searchPlaceholder": "Serie suchen...",
+        "exclude": "Ausschließen",
+        "excludeEveryone": "Für alle ausschließen",
+        "excluded": "Ausgeschlossen",
+        "bookCount": "{count} Bücher"
     },
     "home": {
         "welcome": "Willkommen zurück, {username}",

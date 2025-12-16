@@ -26,6 +26,7 @@ const router = useRouter()
 const route = useRoute()
 
 provide('absUrl', absUrl)
+provide('user', user)
 
 const checkAuth = async () => {
   try {
@@ -83,7 +84,7 @@ watch([() => user.value, () => route.path], ([newUser, newPath]) => {
       if (newUser.force_password_change && newPath !== '/account') {
           router.replace('/account')
       } else if (newUser.id === 'root') {
-          const allowedPaths = ['/admin', '/account', '/login'] // login is allowed as we might be redirecting out of it
+          const allowedPaths = ['/admin', '/account', '/login', '/recommend-settings'] // login is allowed as we might be redirecting out of it
           if (!allowedPaths.includes(newPath)) {
               router.replace('/admin')
           }

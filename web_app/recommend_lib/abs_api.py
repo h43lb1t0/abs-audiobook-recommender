@@ -4,7 +4,7 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, List, Dict
 
 import requests
 from db import UserLib, db
@@ -91,11 +91,13 @@ def get_all_items() -> Tuple[dict, dict]:
             metadata = item.get("media", {}).get("metadata", {})
 
             series_sequence = None
+            series_id = None
             series_list = metadata.get("series", [])
 
             if series_list:
                 # Prioritize structured series data
                 series_name = series_list[0].get("name")
+                series_id = series_list[0].get("id")
                 series_sequence = series_list[0].get("sequence")
             else:
                 series_name = metadata.get("seriesName")
@@ -117,6 +119,7 @@ def get_all_items() -> Tuple[dict, dict]:
                 "author": metadata.get("authorName", "Unknown"),
                 "narrator": metadata.get("narratorName", "Unknown"),
                 "series": series_name,
+                "series_id": series_id,
                 "series_sequence": series_sequence,
                 "genres": metadata.get("genres", []),
                 "tags": item.get("media", {}).get("tags", []),
@@ -139,6 +142,35 @@ def get_all_items() -> Tuple[dict, dict]:
                     items_map[item["id"]]["author"] = authors[0].get("name")
 
     return items_map
+
+
+def get_all_series(lib_id: str) -> List[Dict[str, str]]:
+    """
+    Returns all series with more than one book from ABS
+    Only up to 1000 series are returned, but this should be enough for most libraries
+
+    Args:
+        lib_id (str): The library IDseries_id
+
+    Returns:
+        List[Dict[str, str]]: A list of series with more than one book
+    """
+    series_resp = requests.get(
+        f"{ABS_URL}/api/libraries/{lib_id}/series?limit=1000", headers=HEADERS
+    )
+    series_resp.raise_for_status()
+    series_data = series_resp.json().get("results", [])
+    result_series: List[Dict[str, str]] = []
+    for item in series_data:
+        if len(item.get("books", [])) > 1:
+            result_series.append(
+                {
+                    "name": item.get("name"),
+                    "id": item.get("id"),
+                    "first_book_id": item.get("books", [])[0].get("id"),
+                }
+            )
+    return result_series
 
 
 def get_finished_books(items_map: dict, user_id: str = None) -> Tuple[set, set, set]:

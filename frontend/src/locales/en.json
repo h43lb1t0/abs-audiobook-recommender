@@ -14,7 +14,13 @@
         "changePassword": "Change Password",
         "close": "Close",
         "save": "Save",
-        "recommendSettings": "Recommend Settings"
+        "recommendSettings": "Recommend Settings",
+        "excludeSeriesTitle": "Exclude Series from Sequence Filtering",
+        "searchPlaceholder": "Search series...",
+        "exclude": "Exclude",
+        "excludeEveryone": "Exclude for everyone",
+        "excluded": "Excluded",
+        "bookCount": "{count} books"
     },
     "home": {
         "welcome": "Welcome Back, {username}",

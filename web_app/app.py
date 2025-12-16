@@ -24,7 +24,12 @@ from flask_login import (
 from flask_babel import Babel, gettext as _
 from flask_socketio import SocketIO, emit, join_room
 from logger_conf import setup_logging
-from recommend_lib.abs_api import get_abs_users, get_all_items, get_finished_books
+from recommend_lib.abs_api import (
+    get_abs_users,
+    get_all_items,
+    get_finished_books,
+    get_all_series,
+)
 from recommend_lib.rag import get_rag_system, init_rag_system
 from recommend_lib.recommender import get_recommendations
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -614,6 +619,45 @@ def reactivate_book():
 
     except Exception as e:
         logger.error(f"Error reactivating book: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/series")
+@login_required
+def get_series():
+    """
+    Returns all series from the ABS library
+    """
+    if current_user.id == "root":
+        # Root user is allowed to view series configuration
+        pass
+
+    try:
+        # Determine Library ID
+        lib_id = os.getenv("ABS_LIB")
+        if not lib_id:
+            # Fetch libraries to find the first book library
+            try:
+                libraries_resp = requests.get(
+                    f"{PUBLIC_ABS_URL}/api/libraries",
+                    headers={"Authorization": f"Bearer {ABS_TOKEN}"},
+                )
+                libraries_resp.raise_for_status()
+                libraries = libraries_resp.json().get("libraries", [])
+                for lib in libraries:
+                    if lib.get("mediaType") == "book":
+                        lib_id = lib["id"]
+                        break
+            except Exception as e:
+                logger.error(f"Error fetching libraries to determine ID: {e}")
+
+        if not lib_id:
+            return jsonify({"error": _("No book library found")}), 404
+
+        series = get_all_series(lib_id)
+        return jsonify(series)
+    except Exception as e:
+        logger.error(f"Error fetching series: {e}")
         return jsonify({"error": str(e)}), 500
 
 
