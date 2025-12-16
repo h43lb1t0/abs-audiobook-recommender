@@ -59,57 +59,6 @@ def _load_language_file(language: str, type: str) -> str:
     return content
 
 
-def format_duration(duration_seconds: float) -> str:
-    """
-    Formats the duration into rounded string representation.
-
-    If < 1h: rounds to 15, 30, 45, 60 minutes.
-    If > 1h: minutes part rounds to 0, 15, 30, 45.
-
-    Args:
-        duration_seconds: Duration in seconds
-
-    Returns:
-        Formatted string (e.g. "30 minutes", "1 hours 15 minutes")
-    """
-    if not duration_seconds:
-        return ""
-
-    minutes = duration_seconds / 60.0
-
-    if minutes < 60:
-        if minutes <= 15:
-            return "15 minutes"
-        elif minutes <= 30:
-            return "30 minutes"
-        elif minutes <= 45:
-            return "45 minutes"
-        else:
-            return "1 hour"
-
-    else:
-        hours = int(minutes // 60)
-        rem_minutes = minutes % 60
-
-        rounded_rem = 0
-        if rem_minutes < 7.5:
-            rounded_rem = 0
-        elif rem_minutes < 22.5:
-            rounded_rem = 15
-        elif rem_minutes < 37.5:
-            rounded_rem = 30
-        elif rem_minutes < 52.5:
-            rounded_rem = 45
-        else:
-            hours += 1
-            rounded_rem = 0
-
-        if rounded_rem == 0:
-            return f"{hours} hours"
-        else:
-            return f"{hours} hours {rounded_rem} minutes"
-
-
 def calculate_duration_affinities(finished_books: List[Dict]) -> Dict[str, float]:
     """
     Calculates the user's affinity for each duration bucket.
@@ -1162,7 +1111,7 @@ def get_recommendations(
     return final_recommendations
 
 
-def format_duration(seconds):
+def format_duration(seconds: int) -> str:
     if not seconds:
         return None
 
